@@ -2,7 +2,7 @@
 # Run the agent in Docker on one seeded demo issue.
 # Usage: scripts/run_local.sh <issue number>   (needs Docker running and NEBIUS_API_KEY in .env)
 set -euo pipefail
-n="$1"
+n="${1:?usage: scripts/run_local.sh <issue number, e.g. 1>}"
 cd "$(dirname "$0")/.."
 docker build -q -t red2fix-agent . >/dev/null
 mkdir -p "out/$n"
