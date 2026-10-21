@@ -97,6 +97,7 @@ class Run:
                     out = tools.call(self.root, tc.function.name, args, allow, protect_tests)
                 else:
                     out = "error: tool arguments must be a JSON object"
+                print(f"  tool {tc.function.name} {(tc.function.arguments or '')[:150]} -> {out.splitlines()[0][:80] if out else ''}", flush=True)
                 messages.append({"role": "tool", "tool_call_id": tc.id, "content": out})
         messages.append({"role": "user", "content": "Step limit reached. Give your final answer now, without tools."})
         return self.llm.chat(phase, messages).choices[0].message.content or ""
@@ -129,10 +130,12 @@ def reproduce(run, loc):
         exit_code, out = tools.run_tests(run.root, run.repro)
         # Exit 1 = tests ran and failed; 0 = passed, 2/4/5 = collection or usage errors.
         if exit_code != 1:
+            print(f"  red rejected: pytest exit {exit_code}", flush=True)
             feedback = f"\n\nYour previous test did not fail as required (pytest exit {exit_code}):\n{code}\nOutput:\n{out}"
             continue
         verdict = parse_json(run.ask("verify_red", prompts.VERIFY_RED, f"Issue:\n{run.issue}\n\nTest:\n{code}\n\nOutput:\n{out}")) or {}
         if verdict.get("matches") is False:
+            print(f"  red rejected: {verdict.get('reason', '')}", flush=True)
             feedback = f"\n\nYour previous test failed for the wrong reason ({verdict.get('reason', '')}):\n{code}\nOutput:\n{out}"
             continue
         run.save("repro_test.py", code)
@@ -171,6 +174,8 @@ def fix(run, loc, repro_code, red_out, baseline):
 
         run.phase("CHECK")
         feedback = check(run, baseline)
+        if feedback:
+            print(f"  check failed: {feedback.splitlines()[0]}", flush=True)
         if feedback is None:
             return
         history.append(f"Attempt {i}:\n{tools.git_diff(run.root)}\nResult: {feedback[:2000]}")
@@ -209,7 +214,7 @@ def confirm(run):
     return diff, green, suite
 
 
-def summarize(run, loc, red_out, diff, suite):
+def summarize(run, loc, red_out, diff, green, suite):
     run.phase("SUMMARIZE")
     title = run.issue.strip().splitlines()[0].lstrip("# ").strip()
     try:
@@ -217,6 +222,8 @@ def summarize(run, loc, red_out, diff, suite):
     except Exception as e:  # the fix is already proven; a failed summary (even over budget) should not fail the run
         root_cause = f"(summary unavailable: {e})"
     red_line = next((l for l in red_out.splitlines() if l.startswith("E ")), red_out.strip().splitlines()[-1])
+    red_line = re.sub(r"^E\s+", "", red_line).strip()
+    green_line = green.strip().splitlines()[-1] if green.strip() else ""
     suite_line = suite.strip().splitlines()[-1] if suite.strip() else ""
     rows = [json.loads(l) for l in (run.out / "ledger.jsonl").read_text().splitlines()] if (run.out / "ledger.jsonl").exists() else []
     names = {v: k for k, v in config.MODELS.items()}
@@ -225,7 +232,7 @@ def summarize(run, loc, red_out, diff, suite):
     secs = int(time.monotonic() - run.start)
     run.save("summary.md", (
         f"## Fixes #{run.number}: {title}\n\n**Root cause:** {root_cause.strip()}\n\n"
-        f"**Reproduction:** `{run.repro}`\n- Before fix: ❌ {red_line.strip()}\n- After fix:  ✅ 1 passed\n"
+        f"**Reproduction:** `{run.repro}`\n- Before fix: ❌ {red_line}\n- After fix:  ✅ {green_line}\n"
         f"- Existing suite: {suite_line}\n\n"
         f"**Cost:** ${run.llm.spent:.2f} · {secs // 60}m{secs % 60:02d}s · {mix}\n"
     ))
@@ -258,8 +265,8 @@ def run_agent(repo, issue_path, out, number, work, llm=None):
         git(work, "add", run.repro)
         git(work, "commit", "-qm", "repro test")
         fix(run, loc, repro_code, red_out, baseline)
-        diff, _, suite = confirm(run)
-        summarize(run, loc, red_out, diff, suite)
+        diff, green, suite = confirm(run)
+        summarize(run, loc, red_out, diff, green, suite)
         run.result["status"] = "succeeded"
         run.phase("DONE")
     except Abort as e:

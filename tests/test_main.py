@@ -70,7 +70,10 @@ def test_happy_path(buggy_repo, tmp_path):
     assert "1 passed" in (out / "green.log").read_text()
     assert "+    if b == 0:" in (out / "patch.diff").read_text()
     assert "test_repro" not in (out / "patch.diff").read_text()
-    assert "## Fixes #1: div crashes on zero" in (out / "summary.md").read_text()
+    summary = (out / "summary.md").read_text()
+    assert "## Fixes #1: div crashes on zero" in summary
+    assert "- Before fix: ❌ ZeroDivisionError" in summary
+    assert "- After fix:  ✅ 1 passed" in summary
     assert json.loads((out / "result.json").read_text())["status"] == "succeeded"
     # The input repo is never modified.
     assert "return a / b" in (buggy_repo / "mathlib.py").read_text()
