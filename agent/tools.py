@@ -1,5 +1,6 @@
 """Repo tools for the agent. Every tool takes the repo root and returns truncated text."""
 
+import os
 import subprocess
 import sys
 import tempfile
@@ -10,6 +11,8 @@ import config
 from agent import guards
 
 CMD_TIMEOUT = 30
+# In SWE-bench images the agent runs on its own Python; tests must use the repo's env.
+TEST_PYTHON = os.environ.get("RED2FIX_TEST_PYTHON", sys.executable)
 TEST_TIMEOUT = 300
 
 
@@ -78,7 +81,7 @@ def apply_patch(root, diff):
 
 
 def run_tests(root, selector=""):
-    args = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider"]
+    args = [TEST_PYTHON, "-m", "pytest", "-q", "-p", "no:cacheprovider"]
     if selector:
         args.append(selector)
     try:
@@ -88,13 +91,11 @@ def run_tests(root, selector=""):
     return r.returncode, _truncate(r.stdout + r.stderr)
 
 
-def failing_tests(root, selector=""):
+def failing_tests(root, *selectors):
     """Set of failed/errored test ids, from a junit report so nothing is lost to truncation."""
     with tempfile.TemporaryDirectory() as d:
         report = Path(d) / "junit.xml"
-        args = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", f"--junitxml={report}"]
-        if selector:
-            args.append(selector)
+        args = [TEST_PYTHON, "-m", "pytest", "-q", "-p", "no:cacheprovider", f"--junitxml={report}", *selectors]
         try:
             _run(root, args, timeout=TEST_TIMEOUT)
         except subprocess.TimeoutExpired:

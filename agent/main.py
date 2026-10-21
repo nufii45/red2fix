@@ -50,8 +50,9 @@ def git(root, *args):
 
 
 class Run:
-    def __init__(self, root, issue, number, out, llm):
+    def __init__(self, root, issue, number, out, llm, suite=(), max_seconds=config.MAX_SECONDS):
         self.root, self.issue, self.number, self.out, self.llm = root, issue, number, out, llm
+        self.suite, self.max_seconds = suite, max_seconds
         self.repro = f"tests/test_repro_issue_{number}.py"
         self.start = time.monotonic()
         self.result = {"status": "running", "phase": None, "abort_reason": None, "iterations": 0, "escalations": 0}
@@ -62,7 +63,7 @@ class Run:
         self.check_time()
 
     def check_time(self):
-        if time.monotonic() - self.start > config.MAX_SECONDS:
+        if time.monotonic() - self.start > self.max_seconds:
             raise Abort("timeout")
 
     def ask(self, phase, system, user, **kw):
@@ -163,7 +164,7 @@ def check(run, baseline):
     violations = guards.check_patch(tools.git_diff(run.root), run.repro)
     if violations:
         return "Your change was rejected:\n" + "\n".join(violations)
-    broken = tools.failing_tests(run.root) - baseline
+    broken = tools.failing_tests(run.root, *run.suite) - baseline
     if broken:
         return "The reproduction test passes, but your change broke existing tests:\n" + "\n".join(sorted(broken))
     return None
@@ -250,9 +251,14 @@ def summarize(run, loc, red_out, diff, green, suite):
 
 
 def prepare(repo, work):
-    """Copy the input repo so it is never modified, and make sure it is a git repo with a commit."""
-    shutil.rmtree(work, ignore_errors=True)
-    shutil.copytree(repo, work, ignore=shutil.ignore_patterns("__pycache__", ".pytest_cache", ".venv"))
+    """Copy the input repo so it is never modified, and make sure it is a git repo with a commit.
+
+    work == repo runs in place: SWE-bench images pip-install /testbed in editable mode, so a copy
+    would test the wrong code. Only use it in a disposable container.
+    """
+    if work.resolve() != repo.resolve():
+        shutil.rmtree(work, ignore_errors=True)
+        shutil.copytree(repo, work, ignore=shutil.ignore_patterns("__pycache__", ".pytest_cache", ".venv"))
     if not (work / ".git").exists():
         git(work, "init", "-q")
         git(work, "add", "-A")
@@ -264,18 +270,20 @@ def prepare(repo, work):
 ARTIFACTS = ["result.json", "ledger.jsonl", "repro_test.py", "red.log", "green.log", "patch.diff", "summary.md"]
 
 
-def run_agent(repo, issue_path, out, number, work, llm=None):
+def run_agent(repo, issue_path, out, number, work, llm=None, suite=(), max_seconds=config.MAX_SECONDS):
     out.mkdir(parents=True, exist_ok=True)
     # A rerun must not inherit the previous run's ledger or logs.
     for name in ARTIFACTS:
         (out / name).unlink(missing_ok=True)
     prepare(Path(repo), work)
     llm = llm or LLM(ledger_path=out / "ledger.jsonl")
-    run = Run(work, Path(issue_path).read_text(), number, out, llm)
+    # Regression scope; paths that don't exist yet (added by a hidden test patch) are dropped.
+    suite = [s for s in suite if (work / s.split("::")[0]).exists()]
+    run = Run(work, Path(issue_path).read_text(), number, out, llm, suite, max_seconds)
     try:
         triage(run)
         run.phase("BASELINE")
-        baseline = tools.failing_tests(work)
+        baseline = tools.failing_tests(work, *run.suite)
         loc = localize(run)
         repro_code, red_out = reproduce(run, loc)
         run.phase("COMMIT_REPRO")
@@ -307,8 +315,10 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--number", type=int, default=0)
     ap.add_argument("--work", default="/work/repo")
+    ap.add_argument("--suite", nargs="*", default=[], help="test files for the regression check (default: whole suite)")
+    ap.add_argument("--max-seconds", type=int, default=config.MAX_SECONDS)
     a = ap.parse_args()
-    result = run_agent(a.repo, a.issue, Path(a.out), a.number, Path(a.work))
+    result = run_agent(a.repo, a.issue, Path(a.out), a.number, Path(a.work), suite=a.suite, max_seconds=a.max_seconds)
     raise SystemExit(0 if result["status"] == "succeeded" else 1)
 
 

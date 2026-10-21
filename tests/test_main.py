@@ -165,3 +165,26 @@ def test_rerun_clears_old_artifacts(buggy_repo, tmp_path):
     run(buggy_repo, tmp_path, llm)
 
     assert not (out / "ledger.jsonl").exists() and not (out / "patch.diff").exists()
+
+
+def test_in_place_run_edits_the_repo(buggy_repo, tmp_path_factory):
+    # Output must live outside the repo: CONFIRM's `git clean` would delete it.
+    elsewhere = tmp_path_factory.mktemp("elsewhere")
+    result = main.run_agent(buggy_repo, write_issue(elsewhere), elsewhere / "out", 1, buggy_repo, llm=FakeLLM(**base_script()))
+
+    assert result["status"] == "succeeded", result
+    assert "if b == 0" in (buggy_repo / "mathlib.py").read_text()
+
+
+def test_suite_scopes_the_regression_check(buggy_repo, tmp_path):
+    # test_div is outside the suite, so breaking it goes unnoticed: the scope is honoured.
+    breaks_test_div = edit("mathlib.py", "    return a / b", "    return None")
+    llm = FakeLLM(**base_script(fix=[breaks_test_div, reply("done")]))
+
+    result = main.run_agent(
+        buggy_repo, write_issue(tmp_path), tmp_path / "out", 1, tmp_path / "work", llm=llm,
+        suite=["test_mathlib.py::test_div_zero", "tests/added_by_hidden_patch.py"],
+    )
+
+    assert result["status"] == "succeeded", result
+    assert result["iterations"] == 1

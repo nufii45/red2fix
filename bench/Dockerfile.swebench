@@ -1,0 +1,15 @@
+# Thin layer on an official SWE-bench instance image: the agent gets its own Python 3.11,
+# while tests run in the image's conda env against the editable install in /testbed.
+ARG BASE
+FROM ${BASE}
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+ENV UV_PYTHON_INSTALL_DIR=/opt/r2f-python
+RUN uv venv -p 3.11 /opt/r2f && uv pip install -p /opt/r2f/bin/python openai==3.35.1
+
+ENV RED2FIX_TEST_PYTHON=/opt/miniconda3/envs/testbed/bin/python \
+    PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+WORKDIR /opt/r2f/app
+COPY config.py ./
+COPY agent ./agent
+ENTRYPOINT ["/opt/r2f/bin/python", "-m", "agent.main", "--repo", "/testbed", "--work", "/testbed"]
