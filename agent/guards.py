@@ -6,7 +6,7 @@ from pathlib import PurePosixPath
 CHEAT_LINE = re.compile(r"pytest\.skip|xfail|except\b[^:]*:\s*pass\b")
 
 
-def _is_test_file(path):
+def is_test_file(path):
     p = PurePosixPath(path)
     return (
         p.name.startswith("test_")
@@ -44,6 +44,6 @@ def check_patch(diff, repro_path):
     for path in sorted(touched):
         if path == repro_path:
             violations.append(f"modifies the repro test: {path}")
-        elif _is_test_file(path):
+        elif is_test_file(path):
             violations.append(f"modifies a test file: {path}")
     return violations

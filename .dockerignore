@@ -1,0 +1,9 @@
+.env
+.git
+.venv
+out
+demo
+plans
+docs
+tests
+*.jsonl
