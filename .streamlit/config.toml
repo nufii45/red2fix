@@ -1,6 +1,8 @@
 # Everything stays on this machine.
 [server]
 address = "localhost"
+# Skips the first-run email prompt, which hangs a non-interactive shell; open the URL yourself.
+headless = true
 
 [browser]
 gatherUsageStats = false
