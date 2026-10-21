@@ -1,0 +1,16 @@
+[project]
+name = "red2fix"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "openai>=3.35.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

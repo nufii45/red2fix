@@ -1,0 +1,49 @@
+"""Anti-cheat checks on a candidate patch (unified diff text)."""
+
+import re
+from pathlib import PurePosixPath
+
+CHEAT_LINE = re.compile(r"pytest\.skip|xfail|except\b[^:]*:\s*pass\b")
+
+
+def _is_test_file(path):
+    p = PurePosixPath(path)
+    return (
+        p.name.startswith("test_")
+        or p.name.endswith("_test.py")
+        or p.name == "conftest.py"
+        or "tests" in p.parts
+        or "test" in p.parts
+    )
+
+
+def _diff_path(line):
+    # "--- a/x.py" / "+++ b/x.py"; /dev/null marks a created or deleted file.
+    path = line[4:].split("\t")[0].strip()
+    if path == "/dev/null":
+        return None
+    return path[2:] if path[:2] in ("a/", "b/") else path
+
+
+def check_patch(diff, repro_path):
+    """Return a list of violations; empty means the patch is allowed.
+
+    `diff` must be the fix only, taken against a state where the repro test is already
+    committed, otherwise creating the repro test itself counts as modifying it.
+    """
+    violations = []
+    touched = set()
+    for line in diff.splitlines():
+        if line.startswith(("--- ", "+++ ")):
+            path = _diff_path(line)
+            if path:
+                touched.add(path)
+        elif line.startswith("+") and CHEAT_LINE.search(line):
+            violations.append(f"adds forbidden construct: {line[1:].strip()}")
+
+    for path in sorted(touched):
+        if path == repro_path:
+            violations.append(f"modifies the repro test: {path}")
+        elif _is_test_file(path):
+            violations.append(f"modifies a test file: {path}")
+    return violations
