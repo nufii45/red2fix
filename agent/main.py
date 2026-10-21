@@ -133,6 +133,17 @@ def reproduce(run, loc):
             print(f"  red rejected: pytest exit {exit_code}", flush=True)
             feedback = f"\n\nYour previous test did not fail as required (pytest exit {exit_code}):\n{code}\nOutput:\n{out}"
             continue
+        # Every repro test must fail now: a passing one either asserts the buggy behaviour
+        # (so no correct fix can make the file pass) or proves nothing.
+        passed = re.search(r"(\d+) passed", out.strip().splitlines()[-1])
+        if passed:
+            print(f"  red rejected: {passed.group(1)} repro test(s) already pass", flush=True)
+            feedback = (
+                f"\n\nYour previous test was rejected: {passed.group(1)} of its tests already pass on the current code. "
+                f"Every test in the file must fail now and pass after the fix; remove tests that assert the current "
+                f"buggy behaviour or that already pass.\n{code}\nOutput:\n{out}"
+            )
+            continue
         verdict = parse_json(run.ask("verify_red", prompts.VERIFY_RED, f"Issue:\n{run.issue}\n\nTest:\n{code}\n\nOutput:\n{out}")) or {}
         if verdict.get("matches") is False:
             print(f"  red rejected: {verdict.get('reason', '')}", flush=True)

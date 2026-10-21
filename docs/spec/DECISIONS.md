@@ -14,6 +14,7 @@ Newest last. One line each; the reasoning lives in [ARCHITECTURE.md](ARCHITECTUR
 - 2026-10-22: The fix model edits with search/replace (`edit_file`), not unified diffs; `apply_patch` is harness-only.
 - 2026-10-22: Before success, CONFIRM resets to the repro commit, checks the repro fails, re-applies `patch.diff`, and checks it passes. This proves red→green and that the saved patch applies.
 - 2026-10-22: Phases live in `agent/main.py` instead of `agent/phases/` until that file gets unwieldy.
+- 2026-10-22: VERIFY_RED requires every test in the repro file to fail, not just the file. Demo issue 2 shipped a repro that also asserted the buggy output, which no correct fix can pass.
 
 ## Hour-zero results
 

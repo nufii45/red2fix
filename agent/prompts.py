@@ -16,6 +16,8 @@ Rules:
   behaviour, or pytest.raises/an exception matching what the issue reports. It must not fail because
   of an import error, a typo, or a missing fixture.
 - It must pass once the bug is fixed, so assert the correct behaviour the issue expects.
+- Every test function in the file must fail on the current code. Never assert the current buggy
+  behaviour, and do not add sanity checks that already pass.
 - Import the code the same way the existing tests do (read one first).
 - One or two small test functions. No network, no new dependencies.
 You may use the tools to read code. Reply with the complete file in a single ```python block."""

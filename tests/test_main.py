@@ -138,3 +138,18 @@ def test_failing_tests(buggy_repo):
 ])
 def test_parse_json(text, expected):
     assert main.parse_json(text) == expected
+
+
+def test_repro_with_a_passing_test_is_rejected(buggy_repo, tmp_path):
+    mixed = reply(
+        "```python\nfrom mathlib import div\n\n\n"
+        "def test_buggy_behaviour():\n    assert div(6, 3) == 2\n\n\n"
+        "def test_repro():\n    assert div(1, 0) is None\n```"
+    )
+    llm = FakeLLM(**base_script(reproduce=[mixed, reply(REPRO)]))
+
+    result = run(buggy_repo, tmp_path, llm)
+
+    assert result["status"] == "succeeded", result
+    second_prompt = [msgs[1]["content"] for phase, msgs in llm.seen if phase == "reproduce"][1]
+    assert "1 of its tests already pass" in second_prompt
