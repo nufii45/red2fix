@@ -12,8 +12,6 @@ Newest last. One line each; the reasoning lives in [ARCHITECTURE.md](ARCHITECTUR
 
 ## Hour-zero results
 
-_Fill in after running `scripts/hour_zero.py` and the Nebius quickstart job._
-
-- Live model IDs:
-- Tool calling (ultra / super / nano):
+- Live model IDs (2026-10-22): `nvidia/Nemotron-3-Ultra-550b-a55b`, `nvidia/nemotron-3-super-120b-a12b`, `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B` (cookbook's lowercase ID 404s). Also listed, unused: `nvidia/Nemotron-3.5-Super-VL`, `nvidia/Nemotron-3_5-Lightning`.
+- Tool calling (2026-10-22): Ultra, Super and Nano all return native `tool_calls`; no JSON-mode fallback needed.
 - Serverless Jobs: CPU presets in region, env/secret passing, max runtime, measured cold start:

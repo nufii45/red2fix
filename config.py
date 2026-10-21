@@ -1,10 +1,10 @@
 BASE_URL = "https://api.tokenfactory.nebius.com/v1/"
 
-# Placeholders from the spec; replace with the exact strings from scripts/hour_zero.py.
+# Exact IDs from the live /v1/models list (2026-10-22).
 MODELS = {
     "ultra": "nvidia/Nemotron-3-Ultra-550b-a55b",
     "super": "nvidia/nemotron-3-super-120b-a12b",
-    "nano": "nvidia/nvidia-nemotron-3-nano-30b-a3b",
+    "nano": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
 }
 
 # USD per 1M tokens: (input, output). Super price is unverified; confirm on the Token Factory pricing page.
