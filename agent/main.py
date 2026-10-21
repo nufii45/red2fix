@@ -261,8 +261,14 @@ def prepare(repo, work):
         f.write("\n__pycache__/\n*.pyc\n.pytest_cache/\n")
 
 
+ARTIFACTS = ["result.json", "ledger.jsonl", "repro_test.py", "red.log", "green.log", "patch.diff", "summary.md"]
+
+
 def run_agent(repo, issue_path, out, number, work, llm=None):
     out.mkdir(parents=True, exist_ok=True)
+    # A rerun must not inherit the previous run's ledger or logs.
+    for name in ARTIFACTS:
+        (out / name).unlink(missing_ok=True)
     prepare(Path(repo), work)
     llm = llm or LLM(ledger_path=out / "ledger.jsonl")
     run = Run(work, Path(issue_path).read_text(), number, out, llm)

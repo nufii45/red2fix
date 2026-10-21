@@ -153,3 +153,15 @@ def test_repro_with_a_passing_test_is_rejected(buggy_repo, tmp_path):
     assert result["status"] == "succeeded", result
     second_prompt = [msgs[1]["content"] for phase, msgs in llm.seen if phase == "reproduce"][1]
     assert "1 of its tests already pass" in second_prompt
+
+
+def test_rerun_clears_old_artifacts(buggy_repo, tmp_path):
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / "ledger.jsonl").write_text('{"stale": true}\n')
+    (out / "patch.diff").write_text("stale")
+    llm = FakeLLM(**base_script(triage=[reply('{"in_scope": false, "reason": "x"}')]))
+
+    run(buggy_repo, tmp_path, llm)
+
+    assert not (out / "ledger.jsonl").exists() and not (out / "patch.diff").exists()
