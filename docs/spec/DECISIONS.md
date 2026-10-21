@@ -9,9 +9,11 @@ Newest last. One line each; the reasoning lives in [ARCHITECTURE.md](ARCHITECTUR
 - 2026-10-20: Plain Python agent, no agent framework.
 - 2026-10-20: PRs only against our own forks, never upstream.
 - 2026-10-21: Python 3.11 managed by `uv`; deps limited to `openai` (+ `pytest` dev) until a slice needs more.
+- 2026-10-22: Token Factory only, no Nebius AI Cloud. Sandboxes run under local `docker run`, never Serverless Jobs; supersedes the 2026-10-20 Serverless Jobs decision. README must say Nebius is used for inference only.
+- 2026-10-22: Total model budget is the $50 hackathon credit. Estimate per-run cost from the first 3 runs before any benchmark; the Ultra-only comparison run happens only if it fits.
 
 ## Hour-zero results
 
 - Live model IDs (2026-10-22): `nvidia/Nemotron-3-Ultra-550b-a55b`, `nvidia/nemotron-3-super-120b-a12b`, `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B` (cookbook's lowercase ID 404s). Also listed, unused: `nvidia/Nemotron-3.5-Super-VL`, `nvidia/Nemotron-3_5-Lightning`.
 - Tool calling (2026-10-22): Ultra, Super and Nano all return native `tool_calls`; no JSON-mode fallback needed.
-- Serverless Jobs: CPU presets in region, env/secret passing, max runtime, measured cold start:
+- Serverless Jobs: not used (no AI Cloud access).
