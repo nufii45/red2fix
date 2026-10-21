@@ -75,6 +75,9 @@ def test_happy_path(buggy_repo, tmp_path):
     assert "- Before fix: ❌ ZeroDivisionError" in summary
     assert "- After fix:  ✅ 1 passed" in summary
     assert json.loads((out / "result.json").read_text())["status"] == "succeeded"
+    events = [json.loads(l) for l in (out / "events.jsonl").read_text().splitlines()]
+    assert [e["name"] for e in events if e["ev"] == "phase"][:3] == ["TRIAGE", "BASELINE", "LOCALIZE"]
+    assert events[-1] == {**events[-1], "ev": "end", "status": "succeeded"}
     # The input repo is never modified.
     assert "return a / b" in (buggy_repo / "mathlib.py").read_text()
     assert "if b == 0" not in (buggy_repo / "mathlib.py").read_text()
@@ -160,11 +163,13 @@ def test_rerun_clears_old_artifacts(buggy_repo, tmp_path):
     out.mkdir()
     (out / "ledger.jsonl").write_text('{"stale": true}\n')
     (out / "patch.diff").write_text("stale")
+    (out / "events.jsonl").write_text('{"stale": true}\n')
     llm = FakeLLM(**base_script(triage=[reply('{"in_scope": false, "reason": "x"}')]))
 
     run(buggy_repo, tmp_path, llm)
 
     assert not (out / "ledger.jsonl").exists() and not (out / "patch.diff").exists()
+    assert "stale" not in (out / "events.jsonl").read_text()
 
 
 def test_in_place_run_edits_the_repo(buggy_repo, tmp_path_factory):

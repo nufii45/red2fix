@@ -7,3 +7,5 @@ plans
 docs
 tests
 *.jsonl
+dashboard
+.streamlit

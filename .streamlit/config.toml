@@ -1,0 +1,6 @@
+# Everything stays on this machine.
+[server]
+address = "localhost"
+
+[browser]
+gatherUsageStats = false

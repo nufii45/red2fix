@@ -60,7 +60,13 @@ class Run:
     def phase(self, name):
         self.result["phase"] = name
         print(f"PHASE {name}", flush=True)
+        self.event(ev="phase", name=name, iteration=self.result["iterations"])
         self.check_time()
+
+    def event(self, **row):
+        """Live progress for the dashboard; `out` is bind-mounted, so the host sees each line at once."""
+        with open(self.out / "events.jsonl", "a") as f:
+            f.write(json.dumps({"t": time.time(), **row}) + "\n")
 
     def check_time(self):
         if time.monotonic() - self.start > self.max_seconds:
@@ -267,7 +273,7 @@ def prepare(repo, work):
         f.write("\n__pycache__/\n*.pyc\n.pytest_cache/\n")
 
 
-ARTIFACTS = ["result.json", "ledger.jsonl", "repro_test.py", "red.log", "green.log", "patch.diff", "summary.md"]
+ARTIFACTS = ["result.json", "events.jsonl", "ledger.jsonl", "repro_test.py", "red.log", "green.log", "patch.diff", "summary.md"]
 
 
 def run_agent(repo, issue_path, out, number, work, llm=None, suite=(), max_seconds=config.MAX_SECONDS):
@@ -304,6 +310,7 @@ def run_agent(repo, issue_path, out, number, work, llm=None, suite=(), max_secon
     finally:
         run.result.update(cost_usd=round(llm.spent, 6), seconds=round(time.monotonic() - run.start, 1))
         run.save("result.json", json.dumps(run.result, indent=2))
+        run.event(ev="end", status=run.result["status"], abort_reason=run.result["abort_reason"])
         print("RESULT", json.dumps(run.result), flush=True)
     return run.result
 

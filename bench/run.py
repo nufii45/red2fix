@@ -16,10 +16,18 @@ ROOT = Path(__file__).resolve().parent.parent
 INSTANCES = json.loads((ROOT / "bench" / "instances.json").read_text())
 
 
+def aborted(out, reason):
+    """Record a run that never produced its own result, so report() and the dashboard still count it."""
+    r = {"status": "aborted", "abort_reason": reason}
+    (out / "result.json").write_text(json.dumps(r, indent=2))
+    return r
+
+
 def run_one(inst, out_root, max_seconds):
     iid = inst["instance_id"]
     out = out_root / iid
     out.mkdir(parents=True, exist_ok=True)
+    (out / "result.json").unlink(missing_ok=True)  # a stale result would hide a crash in this run
     (out / "issue.md").write_text(inst["problem_statement"])
     tag = "r2f-" + iid.lower().replace("__", "-")
     number = re.search(r"(\d+)$", iid).group(1)
@@ -30,7 +38,7 @@ def run_one(inst, out_root, max_seconds):
             cwd=ROOT, stdout=log, stderr=subprocess.STDOUT,
         )
         if build.returncode:
-            return iid, {"status": "aborted", "abort_reason": "error: image build failed (see run.log)"}
+            return iid, aborted(out, "error: image build failed (see run.log)")
         subprocess.run(
             ["docker", "run", "--rm", "--platform", "linux/amd64", "--env-file", str(ROOT / ".env"),
              "-v", f"{out}:/out", tag, "--issue", "/out/issue.md", "--out", "/out", "--number", number,
@@ -39,7 +47,7 @@ def run_one(inst, out_root, max_seconds):
         )
     result = out / "result.json"
     if not result.exists():
-        return iid, {"status": "aborted", "abort_reason": "error: no result.json (see run.log)"}
+        return iid, aborted(out, "error: no result.json (see run.log)")
     return iid, json.loads(result.read_text())
 
 

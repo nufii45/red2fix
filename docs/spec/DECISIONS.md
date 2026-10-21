@@ -19,6 +19,7 @@ Newest last. One line each; the reasoning lives in [ARCHITECTURE.md](ARCHITECTUR
 - 2026-10-22: Benchmark = 20 SWE-bench Lite instances frozen in `bench/instances.json` (`bench/pick.py`), only from repos whose official runner is plain pytest (requests, flask, pytest, pylint, astropy, xarray, seaborn). Django, sympy and sphinx are excluded because they use their own runners.
 - 2026-10-22: Benchmark sandboxes are thin layers on the official amd64 instance images, run under emulation on the arm64 Mac. The agent brings its own Python 3.11 and works in place in `/testbed` (editable install), and tests run with the image's testbed env.
 - 2026-10-22: On benchmark runs, the regression check (BASELINE/CHECK) is scoped to the test files the official test patch touches, because full suites are too slow under emulation. The model never sees this list. Known gap: network-dependent tests (e.g. requests → httpbin.org) can flake between baseline and check.
+- 2026-10-22: Dashboard is Streamlit reading the run folders in `out/` directly, no database; localhost only, telemetry off, nothing hosted. Live progress comes from `events.jsonl`, which the agent writes into its bind-mounted `out`. It is read-only unless `RED2FIX_ENABLE_LAUNCH=1`, which adds a one-run-at-a-time launcher for demo issues. Supersedes the SQLite part of ARCHITECTURE.md.
 
 ## Hour-zero results
 
