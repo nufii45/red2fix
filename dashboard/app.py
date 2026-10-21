@@ -1,4 +1,4 @@
-"""Red2Fix dashboard: reads the run folders in out/, nothing else.
+"""Red2Fix dashboard: reads the run folders in out/, nothing else. Styled bryl-minimal (dashboard/style.css).
 
 Run: uv run streamlit run dashboard/app.py   (RED2FIX_ENABLE_LAUNCH=1 adds the demo Run button)
 """
@@ -6,6 +6,7 @@ Run: uv run streamlit run dashboard/app.py   (RED2FIX_ENABLE_LAUNCH=1 adds the d
 import os
 import sys
 import time
+from html import escape
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # streamlit only puts dashboard/ on the path
@@ -19,7 +20,17 @@ BUDGET_USD = 50.0
 ROOT = data.ROOT
 OUT = ROOT / "out"
 
-st.set_page_config(page_title="Red2Fix", layout="wide")
+st.set_page_config(page_title="red2fix", layout="wide")
+st.markdown(f"<style>{(Path(__file__).parent / 'style.css').read_text()}</style>", unsafe_allow_html=True)
+
+
+def html(markup):
+    """Our own markup only; every run-derived value in it goes through escape()."""
+    st.markdown(markup, unsafe_allow_html=True)
+
+
+def section(n, name):
+    html(f'<div class="r2f-section">{n:02d} — {name}</div>')
 
 
 @st.cache_data(show_spinner=False)
@@ -33,61 +44,71 @@ def load(group):
 
 def step_bar(run):
     r = run["result"]
-    current = data.STEPS.get(r.get("phase"), None)
+    current = data.STEPS.get(r.get("phase"))
     idx = data.STEP_NAMES.index(current) if current else -1
-    cells = []
+    pills = []
     for i, name in enumerate(data.STEP_NAMES):
         if r["status"] == "succeeded" or i < idx:
-            cells.append(f"✅ {name}")
-        elif i == idx and r["status"] == "aborted":
-            cells.append(f"❌ **{name}**")
+            cls = "done"
         elif i == idx:
-            cells.append(f"🔵 **{name}**")
+            cls = "fail" if r["status"] == "aborted" else "now"
         else:
-            cells.append(f"⚪ {name}")
-    st.markdown(" → ".join(cells))
+            cls = ""
+        mark = "✕ " if cls == "fail" else ""
+        pills.append(f'<span class="r2f-step {cls}">{mark}{name}</span>')
+    bar = f'<div class="r2f-steps">{"<span class=r2f-arrow>→</span>".join(pills)}</div>'
     if r["status"] == "aborted":
-        st.error(f"Aborted: {r.get('abort_reason')}")
+        bar += f'<div class="r2f-note">aborted · {escape(str(r.get("abort_reason")))}</div>'
+    return bar
 
 
-def live_details(run):
+def live_card(run):
     events = run["events"]
     fix_iter = sum(e.get("name") == "FIX" for e in events)
     elapsed = time.time() - events[0]["t"] if events else 0
     last = run["ledger"][-1] if run["ledger"] else None
-    call = f" · last call: {last['phase']} on {data.MODEL_NAMES.get(last['model'], last['model'])}" if last else ""
-    st.caption(f"{elapsed:.0f}s elapsed · fix iteration {fix_iter} · ${run['result']['cost_usd']:.3f} so far{call}")
+    call = f" · last call {escape(last['phase'])} on {escape(data.MODEL_NAMES.get(last['model'], last['model']))}" if last else ""
+    return (
+        f'<div class="r2f-card r2f-in"><div class="head"><span class="name">{escape(run["name"])}</span>'
+        f'<span class="r2f-label">live</span></div>{step_bar(run)}'
+        f'<div class="r2f-label">{elapsed:.0f}s elapsed · fix iteration {fix_iter} · '
+        f'${run["result"]["cost_usd"]:.3f} so far{call}</div></div>'
+    )
+
+
+def stat(label, value, sub=""):
+    return (f'<div class="r2f-stat"><div class="r2f-label">{label}</div><div class="v">{value}</div>'
+            f'<div class="s">{sub}</div></div>')
 
 
 # Sidebar
-runs_index = data.find_runs(OUT)
-groups = sorted({g for g, _ in runs_index}, key=lambda g: (g != "demo", g))
+groups = sorted({g for g, _ in data.find_runs(OUT)}, key=lambda g: (g != "demo", g))
 if os.environ.get("RED2FIX_ENABLE_LAUNCH") == "1":
     with st.sidebar:
-        st.subheader("Start a demo run")
-        issues = launch.demo_issues(ROOT)
-        n = st.selectbox("Demo issue", issues)
+        html('<div class="r2f-section" style="margin-top:0">start a demo run</div>')
+        n = st.selectbox("Demo issue", launch.demo_issues(ROOT))
         pid = launch.running_pid(OUT / ".launch.lock")
-        if st.button("Run", disabled=bool(pid), type="primary"):
+        if st.button("Run ↗", disabled=bool(pid), type="primary"):
             try:
                 launch.start(n, ROOT)
                 st.rerun()
             except (ValueError, RuntimeError) as e:
-                st.error(str(e))
+                html(f'<div class="r2f-note">{escape(str(e))}</div>')
         if pid:
-            st.caption(f"Run in progress (pid {pid}). Log: out/{n}/run.log")
-        st.divider()
+            st.caption(f"run in progress · pid {pid} · out/{n}/run.log")
+
+html('<header class="r2f-hero r2f-in"><div class="r2f-label">nvidia × nebius · coding &amp; agentic engineering</div>'
+     '<div class="r2f-title">red2fix</div><p class="r2f-lede">Issue in, failing repro test, proven fix out. '
+     'Every number on this page is read from <code>out/</code>.</p></header>')
 
 if not groups:
-    st.title("Red2Fix")
-    st.info("No runs in out/ yet. Start one with `scripts/run_local.sh 1` or `uv run bench/run.py`.")
+    html('<div class="r2f-note">No runs in out/ yet. Start one with scripts/run_local.sh 1 or uv run bench/run.py.</div>')
     st.stop()
 
-group = st.sidebar.selectbox("Runs", groups, format_func=lambda g: "demo issues" if g == "demo" else f"bench: {g}")
-live = st.sidebar.toggle("Refresh every 3 s")
-
-st.title("Red2Fix")
-st.caption("Issue in, failing repro test, proven fix out. Every number below is read from out/.")
+with st.sidebar:
+    html('<div class="r2f-section">view</div>')
+    group = st.selectbox("Runs", groups, format_func=lambda g: "demo issues" if g == "demo" else f"bench · {g}")
+    live = st.toggle("Refresh every 3 s")
 
 
 @st.fragment(run_every=3 if live else None)
@@ -95,47 +116,49 @@ def overview():
     runs = load(group)
     s = data.summarize(runs)
     resolved = data.official(group) if group != "demo" else None
-    cols = st.columns(6)
-    cols[0].metric("Attempted", s["attempted"], help=f"{s['running']} running" if s["running"] else None)
-    cols[1].metric("Own repro red→green", f"{s['won']}/{s['attempted']}", help=f"{s['rate']:.0%}")
-    cols[2].metric("Official SWE-bench", "not scored" if resolved is None else f"{len(resolved & {r['name'] for r in runs})}/{s['attempted']}")
-    cols[3].metric("Median $/issue", f"${s['median_usd']:.3f}")
-    cols[4].metric("Median time/issue", f"{s['median_s']:.0f}s")
-    cols[5].metric("Spend in out/", f"${data.total_spend(OUT):.2f}", help=f"of the ${BUDGET_USD:.0f} credit")
-
+    official = "—" if resolved is None else f"{len(resolved & {r['name'] for r in runs})}/{s['attempted']}"
+    section(1, "overview")
+    html('<div class="r2f-stats r2f-in" style="animation-delay:120ms">'
+         + stat("attempted", s["attempted"], f"{s['running']} running" if s["running"] else "")
+         + stat("own repro red→green", f"{s['won']}/{s['attempted']}", f"{s['rate']:.0%}")
+         + stat("official swe-bench", official, "not scored" if resolved is None else "hidden tests")
+         + stat("median $/issue", f"${s['median_usd']:.3f}")
+         + stat("median time/issue", f"{s['median_s']:.0f}s")
+         + stat("spend in out/", f"${data.total_spend(OUT):.2f}", f"of ${BUDGET_USD:.0f} credit")
+         + "</div>")
     for run in [r for r in runs if r["result"]["status"] == "running"]:
-        with st.container(border=True):
-            st.markdown(f"**Live: {run['name']}**")
-            step_bar(run)
-            live_details(run)
+        html(live_card(run))
 
 
 overview()
 runs = load(group)
 
-left, right = st.columns(2)
+section(2, "cost")
+left, right = st.columns(2, gap="large")
 with left:
-    st.subheader("Cost by model")
-    by_model = data.cost_by(runs, "model")
-    if by_model:
-        st.bar_chart(pd.DataFrame(by_model).T.fillna(0), y_label="USD")
+    html('<div class="r2f-label">by model</div>')
+    by_model = pd.DataFrame(data.cost_by(runs, "model")).T.fillna(0)
+    if not by_model.empty:
+        st.bar_chart(by_model, y_label="usd", height=260)
 with right:
-    st.subheader("Cost by phase")
-    by_phase = data.cost_by(runs, "phase")
-    if by_phase:
-        st.bar_chart(pd.DataFrame(by_phase).T.fillna(0), y_label="USD")
+    html('<div class="r2f-label">by phase</div>')
+    by_phase = pd.DataFrame(data.cost_by(runs, "phase")).T.fillna(0)
+    if not by_phase.empty:
+        st.bar_chart(by_phase, y_label="usd", height=260)
 
+section(3, "failures")
 failures = data.summarize(runs)["failures"]
-st.subheader("Failures")
 if failures:
-    st.bar_chart(pd.Series(failures, name="runs"), horizontal=True)
+    st.bar_chart(pd.Series(failures, name="runs"), horizontal=True, height=40 + 36 * len(failures))
 else:
-    st.caption("No failed runs in this group.")
+    st.caption("no failed runs in this group")
 
+n_section = 4
 bench_groups = [g for g in groups if g != "demo"]
 if len(bench_groups) > 1:
-    st.subheader("Compare benchmark runs")
-    picked = st.multiselect("Runs", bench_groups, default=bench_groups[-2:])
+    section(n_section, "compare")
+    n_section += 1
+    picked = st.multiselect("Benchmark runs", bench_groups, default=bench_groups[-2:])
     rows = {}
     for g in picked:
         s = data.summarize(load(g))
@@ -143,11 +166,11 @@ if len(bench_groups) > 1:
     if rows:
         cmp = pd.DataFrame(rows).T
         st.dataframe(cmp)
-        a, b = st.columns(2)
-        a.bar_chart(cmp["red→green rate"])
-        b.bar_chart(cmp["median $/issue"])
+        a, b = st.columns(2, gap="large")
+        a.bar_chart(cmp["red→green rate"], height=220)
+        b.bar_chart(cmp["median $/issue"], height=220)
 
-st.subheader("Runs")
+section(n_section, "runs")
 resolved = data.official(group) if group != "demo" else None
 table = pd.DataFrame([{
     "run": r["name"],
@@ -160,12 +183,15 @@ table = pd.DataFrame([{
 } for r in runs])
 if resolved is None:
     table = table.drop(columns="official")
-picked_rows = st.dataframe(table, on_select="rerun", selection_mode="single-row", hide_index=True, key=f"table-{group}")
+picked_rows = st.dataframe(
+    table, on_select="rerun", selection_mode="single-row", hide_index=True, key=f"table-{group}",
+    column_config={"$": st.column_config.NumberColumn(format="$%.3f"), "seconds": st.column_config.NumberColumn(format="%.0fs")},
+)
 selected = picked_rows.selection.rows[0] if picked_rows.selection.rows else 0
 run = runs[selected]
 
-st.subheader(f"Run detail: {run['name']}")
-step_bar(run)
+section(n_section + 1, f"detail · {escape(run['name'])}")
+html(step_bar(run))
 issue = run["text"].get("issue.md")
 if issue is None and group == "demo" and (ROOT / "demo" / "issues" / f"{run['name']}.md").exists():
     issue = (ROOT / "demo" / "issues" / f"{run['name']}.md").read_text()
@@ -176,9 +202,9 @@ for tab, (name, lang) in zip(tabs, [("summary.md", None), ("issue.md", "markdown
                                     ("red.log", "text"), ("patch.diff", "diff"), ("green.log", "text")]):
     with tab:
         if not text.get(name):
-            st.caption("Not produced by this run.")
+            st.caption("not produced by this run")
         elif lang is None:
-            st.markdown(text[name])  # model-written; Streamlit markdown keeps HTML off
+            st.markdown(text[name])  # model-written; plain st.markdown keeps HTML off
         else:
             st.code(text[name], language=lang, wrap_lines=True)
 with tabs[6]:
@@ -188,4 +214,4 @@ with tabs[6]:
         calls["t"] = (calls["ts"] - calls["ts"].iloc[0]).round(1)
         st.dataframe(calls[["t", "phase", "model", "in_tokens", "out_tokens", "latency_ms", "cost_usd"]], hide_index=True)
     else:
-        st.caption("Not produced by this run.")
+        st.caption("not produced by this run")

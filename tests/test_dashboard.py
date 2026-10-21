@@ -85,8 +85,8 @@ def test_running_pid_of_a_dead_stranger(tmp_path):
 
 
 @pytest.mark.parametrize("group,red_green,shown", [
-    ("demo", "1/1", "Run detail: 1"),
-    ("pilot", "0/1", "**Live: c__d-2**"),
+    ("demo", "1/1", "detail · 1<"),
+    ("pilot", "0/1", '<span class="name">c__d-2</span>'),
 ])
 def test_app_renders(root, monkeypatch, group, red_green, shown):
     monkeypatch.setattr(data, "ROOT", root)
@@ -94,5 +94,6 @@ def test_app_renders(root, monkeypatch, group, red_green, shown):
     at = AppTest.from_file("../dashboard/app.py", default_timeout=30).run()
     at.sidebar.selectbox[1].set_value(group).run()
     assert not at.exception, at.exception
-    assert at.metric[1].value == red_green
-    assert shown in [m.value for m in at.markdown] + [h.value for h in at.subheader]
+    page = "".join(m.value for m in at.markdown)
+    assert f'<div class="v">{red_green}</div>' in page
+    assert shown in page

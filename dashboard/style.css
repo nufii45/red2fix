@@ -1,0 +1,112 @@
+/* bryl-minimal for the Red2Fix dashboard: monochrome ramp, Geist type roles, hairlines, one halftone accent.
+   Colours mirror the [theme.light]/[theme.dark] tokens in .streamlit/config.toml. */
+
+:root {
+  --bg: #ffffff; --ink: #0a0a0a;
+  --g50: #fafafa; --g100: #f5f5f5; --g200: #e9e9e9; --g300: #d4d4d4; --g400: #a3a3a3; --g500: #737373;
+  --dot: rgba(10, 10, 10, 0.9);
+  --shadow: 0 8px 22px -14px rgba(0, 0, 0, 0.25);
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --mono: "Geist Mono", ui-monospace, monospace;
+  --pixel: "Geist Pixel", "Geist Mono", monospace;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0c0c0f; --ink: #f4f4f5;
+    --g50: #18181b; --g100: #1e1e22; --g200: #2a2a30; --g300: #3a3a42; --g400: #8a8a92; --g500: #a0a0a8;
+    --dot: rgba(244, 244, 245, 0.42);
+    --shadow: none;
+  }
+}
+
+::selection { background: var(--ink); color: var(--bg); }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--g300); border-radius: 999px; }
+
+/* Streamlit chrome */
+[data-testid="stHeader"] { background: transparent; }
+.block-container { max-width: 56rem; padding-top: 3rem; }
+[data-testid="stWidgetLabel"] p,
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p,
+[data-testid="stTab"] p {
+  font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--g500);
+}
+[data-testid="stTab"][aria-selected="true"] p { color: var(--ink); }
+/* No accent colour anywhere, including emoji in model-written text (the PR body's red/green marks). */
+[data-testid="stMarkdownContainer"] { filter: grayscale(1); }
+[data-testid="stCaptionContainer"] p { font-family: var(--mono); font-size: 11px; color: var(--g500); }
+
+/* Hero: pixel title with the page's one halftone accent, fading into the top-right corner. */
+.r2f-hero { position: relative; padding: 0.5rem 0 1.5rem; }
+.r2f-hero::before {
+  content: ""; position: absolute; inset: -2rem -1.5rem auto 45%; height: 11rem; pointer-events: none;
+  background-image: radial-gradient(var(--dot) 1px, transparent 1px);
+  background-size: 9px 9px;
+  -webkit-mask-image: radial-gradient(ellipse at top right, #000 0%, transparent 70%);
+          mask-image: radial-gradient(ellipse at top right, #000 0%, transparent 70%);
+}
+.r2f-title { position: relative; font-family: var(--pixel); font-size: 3rem; line-height: 1; margin: 0.5rem 0 0.75rem; color: var(--ink); }
+.r2f-lede { position: relative; max-width: 42rem; color: var(--g500); margin: 0; }
+
+/* Micro-label: the signature register. */
+.r2f-label { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--g500); }
+
+/* Numbered section header on a hairline. */
+.r2f-section {
+  font-family: var(--pixel); font-size: 13px; color: var(--g400); text-transform: lowercase;
+  border-top: 1px solid var(--g200); padding-top: 0.75rem; margin: 2.5rem 0 0.75rem;
+}
+
+/* Stat row: hairlines on both axes are the design, not gaps. */
+.r2f-stats {
+  display: grid; grid-template-columns: repeat(2, 1fr);
+  border-top: 1px solid var(--g200); border-left: 1px solid var(--g200);
+}
+@media (min-width: 1024px) { .r2f-stats { grid-template-columns: repeat(3, 1fr); } }
+.r2f-stat { padding: 1rem 1.25rem; border-right: 1px solid var(--g200); border-bottom: 1px solid var(--g200); }
+.r2f-stat .v { font-family: var(--pixel); font-size: 1.75rem; line-height: 1.1; margin-top: 0.35rem; color: var(--ink); }
+.r2f-stat .s { font-family: var(--mono); font-size: 11px; color: var(--g500); margin-top: 0.25rem; }
+
+/* Live run card. */
+.r2f-card {
+  border: 1px solid var(--g200); border-radius: 16px; padding: 1.25rem; margin-top: 0.75rem;
+  background: linear-gradient(var(--g50), var(--bg)); box-shadow: var(--shadow);
+}
+.r2f-card .head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.75rem; }
+.r2f-card .name { font-weight: 600; letter-spacing: -0.02em; }
+
+/* Step bar: pills; the current step is the view's one inverted chip. */
+.r2f-steps { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin: 0.25rem 0 0.5rem; }
+.r2f-step {
+  font-family: var(--mono); font-size: 9px; text-transform: uppercase; letter-spacing: 1px;
+  border: 1px solid var(--g300); border-radius: 999px; padding: 2px 8px; color: var(--g400);
+}
+.r2f-step.done { color: var(--ink); }
+.r2f-step.now, .r2f-step.fail { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.r2f-step.now::before {
+  content: ""; display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: currentColor;
+  margin-right: 6px; vertical-align: 1px; animation: r2f-pulse 1.8s ease-in-out infinite;
+}
+.r2f-arrow { color: var(--g300); font-family: var(--mono); font-size: 10px; }
+.r2f-note {
+  font-family: var(--mono); font-size: 12px; color: var(--ink);
+  border-left: 1px solid var(--ink); padding: 0.25rem 0 0.25rem 0.75rem; margin: 0.5rem 0;
+}
+
+@keyframes r2f-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+@keyframes r2f-up { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+.r2f-in { animation: r2f-up 700ms var(--ease) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .r2f-in, .r2f-step.now::before { animation: none; }
+}
+
+/* Model-written PR body inside the detail tabs: article heading scale, not page-title scale. */
+[data-testid="stTabPanel"] h1, [data-testid="stTabPanel"] h2, [data-testid="stTabPanel"] h3 {
+  font-weight: 600; letter-spacing: -0.02em; line-height: 1.3;
+}
+[data-testid="stTabPanel"] h1 { font-size: 1.6rem; }
+[data-testid="stTabPanel"] h2 { font-size: 1.3rem; }
+[data-testid="stTabPanel"] h3 { font-size: 1.1rem; }
