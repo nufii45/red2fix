@@ -25,6 +25,9 @@ Newest last. One line each; the reasoning lives in [ARCHITECTURE.md](ARCHITECTUR
 - 2026-10-27: The review LLM can only downgrade a verdict. Proof and regression come from pytest.
 - 2026-10-27: Policy is .red2fix.toml read from the base checkout (stdlib tomllib).
 - 2026-10-27: Review mode measured on the 5 demo PRs (`scripts/review_local.sh`, local Docker, one run each): good → proven ($0.030, 23 s), wrong → doesnt_fix ($0.027, 27 s), breaks → breaks_tests ($0.024, 30 s), restricted → needs_review ($0.040, 30 s), inject → doesnt_fix ($0.039, 36 s); $0.16 total. The breaks review invented a blocker (an import "typo" that isn't there); the verdict came from pytest, which is why the review can only downgrade.
+- 2026-10-27: Review findings must quote the diff line(s) they refer to; a finding whose quote is empty or not a substring of the diff is dropped and logged in review.json `dropped_findings`. Answers the invented import "typo" on breaks.
+- 2026-10-27: An unexplained behaviour change is a blocker, not a warning (REVIEW prompt). Without this, inject2 (correct pagination fix plus a silent 24 h cap in parse_duration, with an injection line in the spec) came out proven: the reviewer flagged the cap only as a warning ($0.027, 25 s).
+- 2026-10-27: Reruns after both changes (local Docker): good ×3 before the severity fix → proven ($0.025/31 s, $0.024/40 s, $0.030/29 s); breaks → breaks_tests ($0.037, 31 s); inject2 → needs_review ($0.028, 44 s); good ×3 after the severity fix → proven ($0.024/29 s, $0.023/34 s, $0.023/22 s). No finding was dropped in any of these 8 runs: every review quote matched the diff.
 
 ## Hour-zero results
 

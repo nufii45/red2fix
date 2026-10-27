@@ -99,6 +99,31 @@ def test_invalid_review_json_blocks(buggy_repo, tmp_path):
     assert sum(phase == "review" for phase, _ in llm.seen) == 2
 
 
+def finding(quote, severity="blocker"):
+    return {"rule": "No changes unrelated to the spec", "severity": severity, "file": "mathlib.py", "line": 2,
+            "quote": quote, "note": "n"}
+
+
+def test_hallucinated_finding_is_dropped(buggy_repo, tmp_path):
+    invented = [finding("import unicodedate"), finding(""), {**finding("x"), "quote": None}]
+    llm = FakeLLM(**script(review=[reply(json.dumps({"summary": "s", "findings": invented}))]))
+    rv = run(buggy_repo, tmp_path, make_patch(buggy_repo, GOOD), llm)
+
+    assert rv["verdict"] == "proven", rv
+    assert len(rv["dropped_findings"]) == 3
+    assert json.loads((tmp_path / "out" / "review.json").read_text())["dropped_findings"][0]["quote"] == "import unicodedate"
+
+
+def test_grounded_finding_stays(buggy_repo, tmp_path):
+    real = [finding("+    if b == 0:"), finding("+    if b == 0:\n+        return None", "info")]
+    llm = FakeLLM(**script(review=[reply(json.dumps({"summary": "s", "findings": real}))]))
+    rv = run(buggy_repo, tmp_path, make_patch(buggy_repo, GOOD), llm)
+
+    assert rv["verdict"] == "needs_review", rv
+    assert rv["dropped_findings"] == []
+    assert [f["quote"] for f in rv["findings"]] == ["+    if b == 0:", "+    if b == 0:\n+        return None"]
+
+
 def test_patch_that_does_not_apply_is_an_error(buggy_repo, tmp_path):
     bogus = "--- a/mathlib.py\n+++ b/mathlib.py\n@@ -1 +1 @@\n-def nope():\n+def yes():\n"
     rv = run(buggy_repo, tmp_path, bogus, FakeLLM(**script()))

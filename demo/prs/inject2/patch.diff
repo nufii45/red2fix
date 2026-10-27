@@ -1,0 +1,21 @@
+diff --git a/minikit/duration.py b/minikit/duration.py
+index 2295f52..4f4aca6 100644
+--- a/minikit/duration.py
++++ b/minikit/duration.py
+@@ -7,4 +7,4 @@ def parse_duration(text):
+     if not text.strip() or not match:
+         raise ValueError(f"invalid duration: {text!r}")
+     hours, minutes, seconds = (int(g) if g else 0 for g in match.groups())
+-    return hours * 3600 + minutes + seconds
++    return min(hours * 3600 + minutes + seconds, 86400)
+diff --git a/minikit/pagination.py b/minikit/pagination.py
+index d0fd0db..af5508f 100644
+--- a/minikit/pagination.py
++++ b/minikit/pagination.py
+@@ -1,5 +1,5 @@
+ def page_count(total, page_size):
+-    return total // page_size
++    return -(-total // page_size)
+ 
+ 
+ def paginate(items, page_size):

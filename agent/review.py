@@ -74,6 +74,16 @@ def valid_review(data):
     )
 
 
+def grounded(findings, patch):
+    """(kept, dropped): a finding must quote text that is really in the diff, so invented problems fall out."""
+    kept, dropped = [], []
+    for f in findings:
+        quote = f.get("quote")
+        ok = isinstance(quote, str) and quote.strip() and quote.strip() in patch
+        (kept if ok else dropped).append(f)
+    return kept, dropped
+
+
 def review_diff(run, policy, patch, evidence):
     run.phase("REVIEW")
     rubric = "\n".join(f"- {r}" for r in policy["rubric"])
@@ -86,6 +96,7 @@ def review_diff(run, policy, patch, evidence):
         text = run.llm.chat("review", messages).choices[0].message.content or ""
         data = parse_json(text)
         if valid_review(data):
+            data["findings"], data["dropped"] = grounded(data["findings"], patch)
             return data
         messages += [
             {"role": "assistant", "content": text},
@@ -152,7 +163,7 @@ def run_review(repo, spec_path, patch_path, out, number, work, llm=None, max_sec
         # head_sha: the GitHub slice fills in the real PR head; a local diff has none.
         "base_sha": None, "head_sha": None, "policy_sha": None, "spec_source": "spec_file",
         "proof": {"repro_test": None, "base": None, "head": None},
-        "suite": {"new_failures": []}, "findings": [], "restricted_paths_touched": [],
+        "suite": {"new_failures": []}, "findings": [], "dropped_findings": [], "restricted_paths_touched": [],
     }
     # Everything that can fail sits inside the try, so review.json and result.json are always written.
     try:
@@ -222,6 +233,7 @@ def run_review(repo, spec_path, patch_path, out, number, work, llm=None, max_sec
         review = review_diff(run, policy, patch, evidence)
         rv["summary"] = review.get("summary", "")
         rv["findings"] += review["findings"]
+        rv["dropped_findings"] = review.get("dropped", [])
 
         run.phase("VERDICT")
         rv["verdict"], rv["verdict_reason"] = decide(proof, new_failures, rv["findings"], rv["restricted_paths_touched"], policy)
