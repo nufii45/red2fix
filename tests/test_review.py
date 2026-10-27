@@ -231,3 +231,43 @@ def test_pr_description_spec_caps_proven_at_needs_review():
     assert review.decide("proven", set(), [], [], STRICT, "issue#2")[0] == "proven"
     # The cap never lifts anything: worse verdicts stay what they were.
     assert review.decide("doesnt_fix", set(), [], [], STRICT, "pr_description")[0] == "doesnt_fix"
+
+
+CAP = "-    return hours * 3600 + minutes + seconds\n+    return min(hours * 3600 + minutes + seconds, 86400)"
+
+
+def unrelated(path="minikit/duration.py", quote=CAP, severity="warning"):
+    return [{"rule": "No changes unrelated to the spec", "severity": severity, "quote": quote, "diff_file": path}]
+
+
+@pytest.mark.parametrize("setting,verdict", [("blocker", "needs_review"), ("warning", "proven"), ("blockr", "needs_review")])
+def test_unrelated_change_setting(setting, verdict):
+    # "blockr": an unknown value fails closed.
+    policy = {**DEFAULTS, "unrelated_change": setting}
+    assert review.decide("proven", set(), unrelated(), [], policy)[0] == verdict
+
+
+@pytest.mark.parametrize("finding", [
+    unrelated(path="tests/test_minikit.py"),            # test code
+    unrelated(path="pyproject.toml"),                   # not Python
+    unrelated(quote="     hours, minutes, seconds = (int(g) if g else 0 for g in match.groups())"),  # context only
+    [{**unrelated()[0], "rule": "Handles the edge cases the spec mentions"}],                     # other rule
+])
+def test_only_quoted_unrelated_code_changes_are_raised(finding):
+    assert review.decide("proven", set(), finding, [], {**DEFAULTS, "unrelated_change": "blocker"})[0] == "proven"
+
+
+def test_grounded_records_the_file_the_quote_is_in():
+    diff = (
+        "--- a/minikit/duration.py\n+++ b/minikit/duration.py\n@@ -9,2 +9,2 @@\n" + CAP + "\n"
+        "--- a/minikit/pagination.py\n+++ b/minikit/pagination.py\n@@ -1 +1 @@\n-    return total // page_size\n"
+        "+    return -(-total // page_size)\n"
+    )
+    # The model names the wrong file; the quote decides.
+    kept, _ = review.grounded([{**unrelated()[0], "file": "minikit/pagination.py", "diff_file": None}], diff)
+    assert kept[0]["diff_file"] == "minikit/duration.py"
+
+
+def test_bench_issue_spec_is_never_capped():
+    # Bench reviews pass spec_source="issue"; only "pr_description" is capped.
+    assert review.decide("proven", set(), [], [], STRICT, "issue")[0] == "proven"

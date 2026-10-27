@@ -15,6 +15,8 @@ DEFAULTS = {
     ],
     "restricted_paths": [".github/**", FILE, "setup.py", "pyproject.toml", "setup.cfg"],
     "require_proof": True,
+    # "blocker": a quoted unrelated change to non-test code blocks, whatever severity the reviewer gave it.
+    "unrelated_change": "blocker",
     "budget_usd": 1.00,
 }
 

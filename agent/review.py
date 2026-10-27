@@ -24,6 +24,23 @@ LABELS = {
     "doesnt_fix": "❌ Doesn't fix", "breaks_tests": "❌ Breaks tests", "error": "⛔ Error",
 }
 TEST_RULE = "No weakened, skipped, xfailed or deleted tests"
+UNRELATED_RULE = "No changes unrelated to the spec"
+
+
+def severity(finding, policy):
+    """The finding's severity, raised to blocker for a quoted unrelated change to non-test code when
+    policy unrelated_change = "blocker": the tests only prove the spec's claim, and the reviewer's own
+    severity for such a change proved unreliable (inject2).
+    """
+    path = finding.get("diff_file") or ""
+    changed = any(l.startswith(("+", "-")) for l in (finding.get("quote") or "").strip().splitlines())
+    if (
+        policy.get("unrelated_change", "blocker") != "warning"  # a typo fails closed
+        and (finding.get("rule") or "").strip().lower() == UNRELATED_RULE.lower()
+        and path.endswith(".py") and not guards.is_test_file(path) and changed
+    ):
+        return "blocker"
+    return finding.get("severity")
 
 
 def decide(proof, new_failures, findings, restricted_touched, policy, spec_source="spec_file"):
@@ -40,7 +57,7 @@ def decide(proof, new_failures, findings, restricted_touched, policy, spec_sourc
         return "doesnt_fix", "the repro test still fails with the PR applied"
     if proof == "unproven" and policy["require_proof"]:
         return "unproven", "no test showed the claimed behaviour failing on base"
-    blockers = [f for f in findings if f.get("severity") == "blocker"]
+    blockers = [f for f in findings if severity(f, policy) == "blocker"]
     if blockers or restricted_touched:
         why = [f"blocker: {f.get('rule')}" for f in blockers]
         why += [f"restricted path: {p}" for p in restricted_touched]
@@ -77,12 +94,32 @@ def valid_review(data):
     )
 
 
+def diff_sections(diff):
+    """{path: that file's hunks}, so a quote can be traced to the file it really comes from."""
+    sections, old, path = {}, None, None
+    for line in diff.splitlines(keepends=True):
+        if line.startswith("--- "):
+            old = guards._diff_path(line)
+        elif line.startswith("+++ "):
+            path = guards._diff_path(line) or old
+            sections.setdefault(path, "")
+        elif path:
+            sections[path] += line
+    return sections
+
+
 def grounded(findings, patch):
-    """(kept, dropped): a finding must quote text that is really in the diff, so invented problems fall out."""
+    """(kept, dropped): a finding must quote text that is really in the diff, so invented problems fall out.
+
+    Kept findings get "diff_file", the file the quote was found in (not the file the model named).
+    """
     kept, dropped = [], []
+    sections = diff_sections(patch)
     for f in findings:
         quote = f.get("quote")
         ok = isinstance(quote, str) and quote.strip() and quote.strip() in patch
+        if ok:
+            f["diff_file"] = next((p for p, text in sections.items() if quote.strip() in text), "")
         (kept if ok else dropped).append(f)
     return kept, dropped
 
@@ -156,7 +193,7 @@ def render_md(rv, out):
 
 
 def run_review(repo, spec_path, patch_path, out, number, work, llm=None, max_seconds=config.MAX_SECONDS,
-               spec_source="spec_file", head_sha=None):
+               spec_source="spec_file", head_sha=None, suite=()):
     out.mkdir(parents=True, exist_ok=True)
     for name in ARTIFACTS:
         (out / name).unlink(missing_ok=True)
@@ -180,12 +217,14 @@ def run_review(repo, spec_path, patch_path, out, number, work, llm=None, max_sec
         paths = changed_paths(patch)
         rv["restricted_paths_touched"] = policies.restricted(paths, policy["restricted_paths"])
         rv["base_sha"] = git(work, "rev-parse", "HEAD").strip()
+        # Regression scope, as in main.run_agent; paths that don't exist on base are dropped.
+        suite = [s for s in suite if (work / s.split("::")[0]).exists()]
 
         run.phase("TRIAGE")
         triage = parse_json(run.ask("triage_review", prompts.TRIAGE_REVIEW, f"<spec>\n{run.issue}\n</spec>")) or {}
         rv["claim"] = triage.get("claim", "")
         run.phase("BASELINE")
-        baseline = tools.failing_tests(work)
+        baseline = tools.failing_tests(work, *suite)
 
         proof = "unproven"
         # Only an explicit "no" skips the proof; a garbled Nano reply should not.
@@ -223,7 +262,7 @@ def run_review(repo, spec_path, patch_path, out, number, work, llm=None, max_sec
             proof = "proven" if code == 0 else "doesnt_fix"
             rv["proof"]["head"] = f"{'passed' if code == 0 else f'failed (exit {code})'}: {last_line(head_out)}"
         # The repro is judged above; inside the suite a wrong fix would show up as breaks_tests instead.
-        head = tools.failing_tests(work, f"--ignore={run.repro}")
+        head = tools.failing_tests(work, *suite, f"--ignore={run.repro}")
         # Sentinels (suite timed out, no report) are kept even if base had them too: they must not cancel out.
         new_failures = (head - baseline) | {f for f in head if f.startswith("<")}
         rv["suite"]["new_failures"] = sorted(new_failures)
@@ -240,6 +279,7 @@ def run_review(repo, spec_path, patch_path, out, number, work, llm=None, max_sec
         rv["dropped_findings"] = review.get("dropped", [])
 
         run.phase("VERDICT")
+        rv["proof"]["result"] = proof  # lets bench/report_review.py recompute verdicts under other policies
         rv["verdict"], rv["verdict_reason"] = decide(
             proof, new_failures, rv["findings"], rv["restricted_paths_touched"], policy, spec_source)
         run.phase("DONE")
@@ -277,9 +317,10 @@ def main():
     ap.add_argument("--max-seconds", type=int, default=config.MAX_SECONDS)
     ap.add_argument("--spec-source", default="spec_file", help='e.g. "issue#12" or "pr_description"')
     ap.add_argument("--head-sha", help="the PR head commit being reviewed")
+    ap.add_argument("--suite", nargs="*", default=[], help="test files for the regression check (default: whole suite)")
     a = ap.parse_args()
     rv = run_review(a.repo, a.spec, a.patch, Path(a.out), a.number, Path(a.work), max_seconds=a.max_seconds,
-                    spec_source=a.spec_source, head_sha=a.head_sha)
+                    spec_source=a.spec_source, head_sha=a.head_sha, suite=a.suite)
     raise SystemExit(1 if rv["verdict"] == "error" else 0)
 
 

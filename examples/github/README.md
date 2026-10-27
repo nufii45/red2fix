@@ -43,6 +43,7 @@ rubric = [
 ]
 restricted_paths = [".github/**", ".red2fix.toml", "setup.py", "pyproject.toml", "setup.cfg"]
 require_proof = true   # ⚠️ Unproven blocks the merge
+unrelated_change = "blocker"   # or "warning": how a quoted unrelated change to non-test code counts
 budget_usd = 1.00
 ```
 

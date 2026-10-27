@@ -53,12 +53,16 @@ def pick(rows, n=20, per_repo=5):
                 "difficulty": r.get("difficulty"),
                 "problem_statement": r["problem_statement"],
                 "test_files": patch_test_files(r["test_patch"]),
+                "patch": r["patch"],  # gold patch, reviewed in bench review mode; never the test_patch
             })
     return taken
 
 
 if __name__ == "__main__":
     chosen = pick(fetch_rows())
+    if OUT.exists():
+        frozen = [i["instance_id"] for i in json.loads(OUT.read_text())]
+        assert [c["instance_id"] for c in chosen] == frozen, "the frozen benchmark list changed"
     OUT.write_text(json.dumps(chosen, indent=2) + "\n")
     for c in chosen:
         print(f"{c['instance_id']:40} {c['difficulty']:18} {' '.join(c['test_files'])}")

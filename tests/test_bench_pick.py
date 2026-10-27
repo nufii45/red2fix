@@ -5,7 +5,7 @@ PATCH = "diff --git a/t/test_a.py b/t/test_a.py\n--- a/t/test_a.py\n+++ b/t/test
 
 def row(iid, repo, difficulty="<15 min fix"):
     return {"instance_id": iid, "repo": repo, "image": "img", "base_commit": "c", "difficulty": difficulty,
-            "problem_statement": "p", "test_patch": PATCH}
+            "problem_statement": "p", "test_patch": PATCH, "patch": "gold"}
 
 
 def test_patch_test_files():
@@ -22,3 +22,7 @@ def test_pick_filters_caps_and_orders():
     ]
     ids = [c["instance_id"] for c in pick(rows, n=10, per_repo=2)]
     assert ids == ["psf__requests-1", "psf__requests-2", "pallets__flask-1"]
+
+
+def test_pick_keeps_the_gold_patch():
+    assert pick([row("psf__requests-1", "psf/requests")])[0]["patch"] == "gold"
