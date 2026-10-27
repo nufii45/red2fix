@@ -54,3 +54,9 @@ def test_truncation(buggy_repo, monkeypatch):
     out = tools.read_file(buggy_repo, "big.py")
     assert out.splitlines()[0] == "1: x0 = 0"
     assert out.splitlines()[-1] == "... [45 lines truncated] ..."
+
+
+def test_git_dir_is_off_limits(buggy_repo):
+    with pytest.raises(ValueError, match="inside .git"):
+        tools.read_file(buggy_repo, ".git/HEAD")
+    assert "inside .git" in tools.call(buggy_repo, "read_file", {"path": ".git/config"}, ["read_file"])

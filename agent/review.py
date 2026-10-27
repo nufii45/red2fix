@@ -152,7 +152,8 @@ def render_md(rv, out):
     return "\n".join(lines) + "\n"
 
 
-def run_review(repo, spec_path, patch_path, out, number, work, llm=None, max_seconds=config.MAX_SECONDS):
+def run_review(repo, spec_path, patch_path, out, number, work, llm=None, max_seconds=config.MAX_SECONDS,
+               spec_source="spec_file", head_sha=None):
     out.mkdir(parents=True, exist_ok=True)
     for name in ARTIFACTS:
         (out / name).unlink(missing_ok=True)
@@ -160,8 +161,8 @@ def run_review(repo, spec_path, patch_path, out, number, work, llm=None, max_sec
     run.repro = f"tests/test_repro_pr_{number}.py"
     rv = {
         "verdict": "error", "verdict_reason": None, "claim": "", "summary": "",
-        # head_sha: the GitHub slice fills in the real PR head; a local diff has none.
-        "base_sha": None, "head_sha": None, "policy_sha": None, "spec_source": "spec_file",
+        # head_sha comes from the caller (the PR event); a local diff has none.
+        "base_sha": None, "head_sha": head_sha, "policy_sha": None, "require_proof": None, "spec_source": spec_source,
         "proof": {"repro_test": None, "base": None, "head": None},
         "suite": {"new_failures": []}, "findings": [], "dropped_findings": [], "restricted_paths_touched": [],
     }
@@ -169,7 +170,7 @@ def run_review(repo, spec_path, patch_path, out, number, work, llm=None, max_sec
     try:
         prepare(Path(repo), work)
         policy = policies.load(work)
-        rv["policy_sha"] = policy["sha"]
+        rv["policy_sha"], rv["require_proof"] = policy["sha"], policy["require_proof"]
         run.llm = run.llm or LLM(ledger_path=out / "ledger.jsonl", max_usd=policy["budget_usd"])
         run.issue = Path(spec_path).read_text()
         patch = Path(patch_path).read_text()
@@ -270,8 +271,11 @@ def main():
     ap.add_argument("--number", type=int, default=0)
     ap.add_argument("--work", default="/work/repo")
     ap.add_argument("--max-seconds", type=int, default=config.MAX_SECONDS)
+    ap.add_argument("--spec-source", default="spec_file", help='e.g. "issue#12" or "pr_description"')
+    ap.add_argument("--head-sha", help="the PR head commit being reviewed")
     a = ap.parse_args()
-    rv = run_review(a.repo, a.spec, a.patch, Path(a.out), a.number, Path(a.work), max_seconds=a.max_seconds)
+    rv = run_review(a.repo, a.spec, a.patch, Path(a.out), a.number, Path(a.work), max_seconds=a.max_seconds,
+                    spec_source=a.spec_source, head_sha=a.head_sha)
     raise SystemExit(1 if rv["verdict"] == "error" else 0)
 
 

@@ -31,6 +31,9 @@ def _resolve(root, path):
     p = (root / path).resolve()
     if not p.is_relative_to(root):
         raise ValueError(f"path escapes repo: {path}")
+    # In CI .git holds the PR's head commits; reading it would leak the diff before REPRODUCE.
+    if p.is_relative_to(root / ".git"):
+        raise ValueError(f"path is inside .git: {path}")
     return p
 
 

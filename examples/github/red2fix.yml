@@ -1,0 +1,122 @@
+# Red2Fix merge gate. Copy to .github/workflows/red2fix.yml in the repo under review and pin RED2FIX_SHA.
+#
+# pull_request_target runs this file from the BASE branch, so a PR that edits it can't change how it is
+# judged. It also runs with secrets, so only same-repo PRs run (fork PRs never do): this trusts the repo's
+# collaborators, whose code runs next to the Nebius key. See README.md.
+name: red2fix
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  statuses: write
+  issues: read
+
+concurrency:
+  group: red2fix-${{ github.event.pull_request.number }}
+  cancel-in-progress: true  # a new push cancels the stale review
+
+env:
+  RED2FIX_REPO: nufii45/red2fix
+  RED2FIX_SHA: REPLACE_WITH_A_COMMIT_SHA  # a pinned commit, never a branch
+  HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+  BASE_SHA: ${{ github.event.pull_request.base.sha }}
+  PR_NUMBER: ${{ github.event.pull_request.number }}
+  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+jobs:
+  review:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out the reviewer (pinned)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.RED2FIX_REPO }}
+          ref: ${{ env.RED2FIX_SHA }}
+          path: red2fix
+          persist-credentials: false
+
+      - name: Status pending
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 red2fix/scripts/gh_status.py pending
+
+      - name: Check out the PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.HEAD_SHA }}
+          fetch-depth: 0
+          path: pr
+          persist-credentials: false
+
+      - name: Build the patch, then move the tree to base
+        working-directory: pr
+        run: |
+          git diff "$BASE_SHA...$HEAD_SHA" > ../pr.patch
+          git checkout -q "$BASE_SHA"
+          wc -l ../pr.patch
+
+      - name: Build the spec
+        id: spec
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: echo "source=$(python3 red2fix/scripts/gh_spec.py spec.md)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install the reviewer
+        run: pip install openai==3.35.1 pytest==9.1.1
+
+      # The only step with the Nebius key, and it has no GitHub token. A verdict never fails this step;
+      # gh_status.py turns a missing review.json into `error`.
+      - name: Review
+        working-directory: red2fix
+        env:
+          NEBIUS_API_KEY: ${{ secrets.NEBIUS_API_KEY }}
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          python -m agent.review --repo ../pr --spec ../spec.md --patch ../pr.patch --out ../out \
+            --work "$RUNNER_TEMP/work" --number "$PR_NUMBER" --head-sha "$HEAD_SHA" \
+            --spec-source "${{ steps.spec.outputs.source }}" || true
+
+      - name: Post or update the PR comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p out
+          [ -f out/review.md ] || echo "Red2Fix could not complete the review. See $RUN_URL" > out/review.md
+          { echo "<!-- red2fix -->"; cat out/review.md; } > comment.md
+          id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" --paginate \
+                 --jq '.[] | select(.body | startswith("<!-- red2fix -->")) | .id' | head -1)
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@comment.md >/dev/null
+          else
+            gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" -F body=@comment.md >/dev/null
+          fi
+
+      - name: Final status
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 red2fix/scripts/gh_status.py out/review.json
+
+      - name: Upload the evidence
+        if: always()
+        continue-on-error: true  # a failed upload must not turn a real verdict into `error`
+        uses: actions/upload-artifact@v4
+        with:
+          name: red2fix-pr${{ env.PR_NUMBER }}-${{ env.HEAD_SHA }}
+          path: out/
+          if-no-files-found: ignore
+
+      - name: Status error on crash or cancel
+        if: failure() || cancelled()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 red2fix/scripts/gh_status.py error
