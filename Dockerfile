@@ -12,4 +12,4 @@ WORKDIR /app
 COPY config.py ./
 COPY agent ./agent
 USER agent
-ENTRYPOINT ["python", "-m", "agent.main"]
+ENTRYPOINT ["python", "-m"]

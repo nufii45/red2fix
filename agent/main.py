@@ -118,9 +118,9 @@ def triage(run):
         raise Abort(f"out_of_scope: {t.get('reason', '')}")
 
 
-def localize(run):
+def localize(run, extra=""):
     run.phase("LOCALIZE")
-    user = f"Issue:\n{run.issue}\n\nRepository files:\n{tools.list_files(run.root)}"
+    user = f"Issue:\n{run.issue}\n\nRepository files:\n{tools.list_files(run.root)}{extra}"
     reply = run.tool_loop("localize", prompts.LOCALIZE, user, READ, max_steps=12)
     return parse_json(reply) or {"hypothesis": reply}
 
@@ -273,7 +273,8 @@ def prepare(repo, work):
         f.write("\n__pycache__/\n*.pyc\n.pytest_cache/\n")
 
 
-ARTIFACTS = ["result.json", "events.jsonl", "ledger.jsonl", "repro_test.py", "red.log", "green.log", "patch.diff", "summary.md"]
+ARTIFACTS = ["result.json", "events.jsonl", "ledger.jsonl", "repro_test.py", "red.log", "green.log", "patch.diff", "summary.md",
+             "review.json", "review.md", "head.log"]
 
 
 def run_agent(repo, issue_path, out, number, work, llm=None, suite=(), max_seconds=config.MAX_SECONDS):

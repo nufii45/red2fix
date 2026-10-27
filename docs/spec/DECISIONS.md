@@ -24,6 +24,7 @@ Newest last. One line each; the reasoning lives in [ARCHITECTURE.md](ARCHITECTUR
 - 2026-10-27: Review input is a unified diff applied to the base checkout, not two refs. The tree stays at base through REPRODUCE so the model cannot read the PR's changes; SWE-bench patches and GitHub PRs share one input.
 - 2026-10-27: The review LLM can only downgrade a verdict. Proof and regression come from pytest.
 - 2026-10-27: Policy is .red2fix.toml read from the base checkout (stdlib tomllib).
+- 2026-10-27: Review mode measured on the 5 demo PRs (`scripts/review_local.sh`, local Docker, one run each): good → proven ($0.030, 23 s), wrong → doesnt_fix ($0.027, 27 s), breaks → breaks_tests ($0.024, 30 s), restricted → needs_review ($0.040, 30 s), inject → doesnt_fix ($0.039, 36 s); $0.16 total. The breaks review invented a blocker (an import "typo" that isn't there); the verdict came from pytest, which is why the review can only downgrade.
 
 ## Hour-zero results
 

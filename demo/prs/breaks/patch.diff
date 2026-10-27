@@ -1,0 +1,16 @@
+diff --git a/minikit/text.py b/minikit/text.py
+index 1a452bb..35a2a92 100644
+--- a/minikit/text.py
++++ b/minikit/text.py
+@@ -1,8 +1,8 @@
+ import re
++import unicodedata
+ 
+ 
+ def slugify(text):
+     """Turn a title into a URL slug: 'Hello World!' -> 'hello-world'."""
+-    text = text.lower()
+-    text = re.sub(r"[^a-z0-9]+", "-", text)
+-    return text.strip("-")
++    text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
++    return re.sub(r"[^a-z0-9]+", "-", text.lower())

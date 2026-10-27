@@ -47,3 +47,25 @@ def check_patch(diff, repro_path):
         elif is_test_file(path):
             violations.append(f"modifies a test file: {path}")
     return violations
+
+
+TEST_DEF = re.compile(r"^([+-])\s*(?:async\s+)?def (test_\w+)")
+
+
+def deleted_tests(diff):
+    """Test files the diff deletes and test functions it removes without re-adding.
+
+    A removed test can't fail on head, so the regression check alone would never notice it.
+    """
+    files, removed, added = [], set(), set()
+    old, in_deleted_file = None, False
+    for line in diff.splitlines():
+        if line.startswith("--- "):
+            old = _diff_path(line)
+        elif line.startswith("+++ "):
+            in_deleted_file = _diff_path(line) is None
+            if in_deleted_file and old and is_test_file(old):
+                files.append(old)
+        elif not in_deleted_file and (m := TEST_DEF.match(line)):
+            (removed if m.group(1) == "-" else added).add(m.group(2))
+    return [f"deletes test file: {p}" for p in files] + [f"deletes test function: {n}" for n in sorted(removed - added)]

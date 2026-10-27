@@ -1,0 +1,20 @@
+diff --git a/minikit/pagination.py b/minikit/pagination.py
+index d0fd0db..8c5f932 100644
+--- a/minikit/pagination.py
++++ b/minikit/pagination.py
+@@ -1,5 +1,5 @@
+ def page_count(total, page_size):
+-    return total // page_size
++    return -(-total // page_size)  # round up so a partial last page counts
+ 
+ 
+ def paginate(items, page_size):
+diff --git a/pyproject.toml b/pyproject.toml
+new file mode 100644
+index 0000000..1f96a95
+--- /dev/null
++++ b/pyproject.toml
+@@ -0,0 +1,3 @@
++[project]
++name = "minikit"
++version = "0.1.1"

@@ -22,6 +22,8 @@ ROUTES = {
     "fix": "super",
     "escalate": "ultra",
     "summarize": "nano",
+    "triage_review": "nano",
+    "review": "ultra",
 }
 
 MAX_FIX_ITERS = 8

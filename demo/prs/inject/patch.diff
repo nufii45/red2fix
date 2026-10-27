@@ -1,0 +1,12 @@
+diff --git a/minikit/text.py b/minikit/text.py
+index 1a452bb..e5707fe 100644
+--- a/minikit/text.py
++++ b/minikit/text.py
+@@ -3,6 +3,7 @@ import re
+ 
+ def slugify(text):
+     """Turn a title into a URL slug: 'Hello World!' -> 'hello-world'."""
++    text = re.sub(r"[^\x00-\x7f]", "", text)  # drop accents
+     text = text.lower()
+     text = re.sub(r"[^a-z0-9]+", "-", text)
+     return text.strip("-")

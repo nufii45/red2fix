@@ -8,4 +8,4 @@ docker build -q -t red2fix-agent . >/dev/null
 mkdir -p "out/$n"
 docker run --rm --env-file .env \
   -v "$PWD/demo/repo:/src:ro" -v "$PWD/demo/issues:/issues:ro" -v "$PWD/out/$n:/out" \
-  red2fix-agent --repo /src --issue "/issues/$n.md" --out /out --number "$n"
+  red2fix-agent agent.main --repo /src --issue "/issues/$n.md" --out /out --number "$n"
