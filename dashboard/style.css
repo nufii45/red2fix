@@ -35,7 +35,7 @@
 }
 [data-testid="stTab"][aria-selected="true"] p { color: var(--ink); }
 /* No accent colour anywhere, including emoji in model-written text (the PR body's red/green marks). */
-[data-testid="stMarkdownContainer"] { filter: grayscale(1); }
+[data-testid="stMarkdownContainer"], [data-testid="stCode"] { filter: grayscale(1); }
 [data-testid="stCaptionContainer"] p { font-family: var(--mono); font-size: 11px; color: var(--g500); }
 
 /* Hero: pixel title with the page's one halftone accent, fading into the top-right corner. */
@@ -110,3 +110,18 @@
 [data-testid="stTabPanel"] h1 { font-size: 1.6rem; }
 [data-testid="stTabPanel"] h2 { font-size: 1.3rem; }
 [data-testid="stTabPanel"] h3 { font-size: 1.1rem; }
+
+/* Review verdict card: one big verdict line, then label/value rows on hairlines. */
+.r2f-verdict { font-family: var(--pixel); font-size: 2.25rem; line-height: 1.1; color: var(--ink); margin: 0.25rem 0 0.5rem; }
+.r2f-kv {
+  display: grid; grid-template-columns: 9rem 1fr; gap: 1rem; align-items: baseline;
+  border-top: 1px solid var(--g200); padding: 0.45rem 0; font-size: 0.92rem; overflow-wrap: anywhere;
+}
+.r2f-kv a { color: var(--ink); }
+.r2f-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 0.4rem; }
+.r2f-table th { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--g500); font-weight: 400; text-align: left; }
+.r2f-table th, .r2f-table td { border-top: 1px solid var(--g200); padding: 0.45rem 0.6rem 0.45rem 0; vertical-align: top; overflow-wrap: anywhere; }
+.r2f-table td:first-child { font-family: var(--mono); font-size: 11px; text-transform: uppercase; white-space: nowrap; }
+.r2f-table, .r2f-table th, .r2f-table td { border-left: none !important; border-right: none !important; border-bottom: none; }
+.r2f-table th { white-space: nowrap; }
+.r2f-table td:nth-child(3) { font-family: var(--mono); font-size: 11px; white-space: nowrap; }

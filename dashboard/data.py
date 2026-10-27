@@ -1,6 +1,7 @@
 """Load the run folders under out/ for the dashboard. No Streamlit here, so it stays testable.
 
-Layout: out/<n>/ is a demo run, out/bench/<run-id>/<instance>/ is a benchmark run.
+Layout: out/<n>/ is a demo fix run, out/review-<name>/ a demo review, out/bench/<run-id>/<instance>/ a
+benchmark fix run, and out/bench/<run-id>/<instance>/<gold|failed>/ a benchmark review.
 """
 
 import json
@@ -22,6 +23,21 @@ STEPS = {
 }
 STEP_NAMES = list(dict.fromkeys(STEPS.values()))
 
+# Review phases (agent/review.py) folded the same way.
+REVIEW_STEPS = {
+    "QUEUED": "Triage", "TRIAGE": "Triage", "BASELINE": "Triage", "LOCALIZE": "Localize",
+    "REPRODUCE": "Reproduce", "VERIFY_RED": "Reproduce", "COMMIT_REPRO": "Reproduce",
+    "APPLY_PR": "Head", "HEAD_CHECK": "Head", "REVIEW": "Review", "VERDICT": "Verdict", "DONE": "Verdict",
+}
+REVIEW_STEP_NAMES = list(dict.fromkeys(REVIEW_STEPS.values()))
+REVIEW_KINDS = ("gold", "failed")
+VERDICTS = ["proven", "needs_review", "unproven", "doesnt_fix", "breaks_tests", "error"]
+LABELS = {
+    "proven": "✅ Proven", "needs_review": "🔶 Needs review", "unproven": "⚠️ Unproven",
+    "doesnt_fix": "❌ Doesn't fix", "breaks_tests": "❌ Breaks tests", "error": "⛔ Error",
+}
+REVIEW_TEXT = ["spec.md", "pr.patch", "repro_test.py", "red.log", "head.log", "review.md"]
+
 FAILURES = {
     "out_of_scope": "out of scope", "no_repro": "couldn't reproduce", "max_iterations": "no fix within iteration limit",
     "budget_usd": "budget exceeded", "timeout": "timed out", "confirm_failed": "red→green not confirmed", "error": "error",
@@ -40,11 +56,18 @@ def read_jsonl(path):
     return rows
 
 
+def is_review(run_dir):
+    """A review run, finished or still live (no review.json yet)."""
+    return (run_dir / "review.json").exists() or run_dir.name.startswith("review-") or run_dir.name in REVIEW_KINDS
+
+
 def group_of(run_dir, out_root):
     parts = run_dir.relative_to(out_root).parts
     if len(parts) == 1:
-        return "demo"
+        return "reviews" if is_review(run_dir) else "demo"
     if len(parts) == 3 and parts[0] == "bench":
+        return parts[1]
+    if len(parts) == 4 and parts[0] == "bench" and parts[3] in REVIEW_KINDS:
         return parts[1]
     return None
 
@@ -74,6 +97,39 @@ def load_run(run_dir):
         "name": run_dir.name, "dir": run_dir, "result": result, "events": events, "ledger": ledger,
         "text": {n: (run_dir / n).read_text() for n in TEXT if (run_dir / n).exists()},
     }
+
+
+def run_name(run_dir):
+    """Bench reviews are named <instance>/<kind>; everything else by its folder."""
+    return f"{run_dir.parent.name}/{run_dir.name}" if run_dir.name in REVIEW_KINDS else run_dir.name
+
+
+def load_review(run_dir):
+    """load_run() plus the parsed review.json (None while live) and the review's text files.
+
+    Older review.json files lack dropped_findings, finding quotes and proof.result; callers use .get().
+    """
+    run = load_run(run_dir)
+    try:
+        review = json.loads((run_dir / "review.json").read_text())
+    except (FileNotFoundError, json.JSONDecodeError):
+        review = None
+    text = {n: (run_dir / n).read_text() for n in REVIEW_TEXT if (run_dir / n).exists()}
+    return {**run, "name": run_name(run_dir), "review": review, "text": {**run["text"], **text}}
+
+
+def verdict_counts(runs):
+    """{verdict: count} over finished reviews, in VERDICTS order."""
+    found = Counter(r["review"]["verdict"] for r in runs if r.get("review"))
+    return {v: found[v] for v in VERDICTS}
+
+
+def bench_report(group_dir):
+    """review_report.json written by bench/report_review.py, or None."""
+    try:
+        return json.loads((group_dir / "review_report.json").read_text())
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
 
 
 def failure(result):

@@ -48,3 +48,27 @@ def start(n, root):
                                 stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
     lock.write_text(str(proc.pid))
     return proc.pid
+
+
+def demo_prs(root):
+    return sorted(p.name for p in (root / "demo" / "prs").iterdir() if (p / "patch.diff").exists()) if (root / "demo" / "prs").is_dir() else []
+
+
+def start_review(name, root):
+    """Run scripts/review_local.sh <name> detached, logging to out/review-<name>/run.log. Same lock as start()."""
+    if name not in demo_prs(root):
+        raise ValueError(f"no demo PR {name}")
+    out = root / "out"
+    lock = out / ".launch.lock"
+    if running_pid(lock):
+        raise RuntimeError("a run is already in progress")
+    run_dir = out / f"review-{name}"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    for stale in ("result.json", "review.json"):
+        (run_dir / stale).unlink(missing_ok=True)
+    (run_dir / "events.jsonl").write_text(json.dumps({"t": time.time(), "ev": "phase", "name": "QUEUED"}) + "\n")
+    with open(run_dir / "run.log", "w") as log:
+        proc = subprocess.Popen([str(root / "scripts" / "review_local.sh"), name], cwd=root,
+                                stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+    lock.write_text(str(proc.pid))
+    return proc.pid
