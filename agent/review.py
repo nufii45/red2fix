@@ -7,13 +7,14 @@ The tree stays at base until APPLY_PR, so LOCALIZE and REPRODUCE only ever see t
 
 import argparse
 import json
+import shutil
 import time
 import traceback
 from collections import Counter
 from pathlib import Path
 
 import config
-from agent import guards, prompts, tools
+from agent import guards, pr_context, prompts, tools
 from agent import policy as policies
 from agent.llm import LLM, BudgetExceeded
 from agent.main import ARTIFACTS, Abort, Run, git, localize, parse_json, prepare, reproduce
@@ -193,12 +194,14 @@ def render_md(rv, out):
 
 
 def run_review(repo, spec_path, patch_path, out, number, work, llm=None, max_seconds=config.MAX_SECONDS,
-               spec_source="spec_file", head_sha=None, suite=()):
+               spec_source="spec_file", head_sha=None, suite=(), repro_steps=12):
     out.mkdir(parents=True, exist_ok=True)
     for name in ARTIFACTS:
         (out / name).unlink(missing_ok=True)
+    shutil.rmtree(out / "repro_attempts", ignore_errors=True)
     run = Run(work, "", number, out, llm, max_seconds=max_seconds)
     run.repro = f"tests/test_repro_pr_{number}.py"
+    run.repro_steps = repro_steps
     rv = {
         "verdict": "error", "verdict_reason": None, "claim": "", "summary": "",
         # head_sha comes from the caller (the PR event); a local diff has none.
@@ -232,9 +235,11 @@ def run_review(repo, spec_path, patch_path, out, number, work, llm=None, max_sec
             rv["proof"]["base"] = f"not testable: {triage.get('reason', '')}"
         else:
             listing = "\n".join(paths)
-            loc = localize(run, f"\n\nFiles changed by the pull request (paths only; the change itself is hidden):\n{listing}")
+            # Interface visible, implementation hidden: paths, signatures and changed-function names only.
+            shape = pr_context.interface(work, patch, paths)
+            loc = localize(run, f"\n\nFiles changed by the pull request (paths only; the change itself is hidden):\n{listing}{shape}")
             try:
-                _, red = reproduce(run, loc)
+                _, red = reproduce(run, loc, shape + pr_context.related_test_block(work, paths, run.repro))
             except Abort as e:
                 if str(e) != "no_repro":
                     raise
@@ -318,9 +323,10 @@ def main():
     ap.add_argument("--spec-source", default="spec_file", help='e.g. "issue#12" or "pr_description"')
     ap.add_argument("--head-sha", help="the PR head commit being reviewed")
     ap.add_argument("--suite", nargs="*", default=[], help="test files for the regression check (default: whole suite)")
+    ap.add_argument("--repro-steps", type=int, default=12, help="tool steps per REPRODUCE attempt")
     a = ap.parse_args()
     rv = run_review(a.repo, a.spec, a.patch, Path(a.out), a.number, Path(a.work), max_seconds=a.max_seconds,
-                    spec_source=a.spec_source, head_sha=a.head_sha, suite=a.suite)
+                    spec_source=a.spec_source, head_sha=a.head_sha, suite=a.suite, repro_steps=a.repro_steps)
     raise SystemExit(1 if rv["verdict"] == "error" else 0)
 
 

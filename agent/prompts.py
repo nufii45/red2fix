@@ -20,7 +20,8 @@ Rules:
   behaviour, and do not add sanity checks that already pass.
 - Import the code the same way the existing tests do (read one first).
 - One or two small test functions. No network, no new dependencies.
-You may use the tools to read code. Reply with the complete file in a single ```python block."""
+You may use the tools to read code. When the file is ready, call submit_test with its complete content
+(if you can't call tools, reply with the file in a single ```python block)."""
 
 VERIFY_RED = """You check whether a failing test really reproduces a bug report.
 "matches" is true only if the test fails because of the bug described in the issue (the wrong value or

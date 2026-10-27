@@ -37,6 +37,7 @@ def test_review_one_runs_agent_review_without_the_test_patch(tmp_path, monkeypat
     args = calls[-1]
     assert args[args.index("--entrypoint") + 1] == "/opt/r2f/bin/python" and "agent.review" in args
     assert args[args.index("--spec-source") + 1] == "issue"
+    assert args[args.index("--repro-steps") + 1] == "15"
     assert args[args.index("--suite") + 1:] == ["t.py"]
     assert args[args.index("--repo") + 1] == args[args.index("--work") + 1] == "/testbed"
     assert not any("SECRET" in a for a in args) and "SECRET" not in "".join(p.read_text() for p in out.iterdir())

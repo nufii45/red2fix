@@ -271,3 +271,43 @@ def test_grounded_records_the_file_the_quote_is_in():
 def test_bench_issue_spec_is_never_capped():
     # Bench reviews pass spec_source="issue"; only "pr_description" is capped.
     assert review.decide("proven", set(), [], [], STRICT, "issue")[0] == "proven"
+
+
+CLAMP = [("mathlib.py", "    return a / b\n", "    return a / b\n\n\ndef clamp_div(a, b, limit):\n"
+          "    quotient_zz = a / b if b else 0\n    return min(quotient_zz, limit)\n")]
+
+
+def test_interface_visible_implementation_hidden(buggy_repo, tmp_path):
+    patch = make_patch(buggy_repo, CLAMP + GOOD)
+    llm = FakeLLM(**script())
+    run(buggy_repo, tmp_path, patch, llm)
+
+    # A body line is a leak only if the model couldn't have seen it anyway (in base code or in the spec).
+    seen_anyway = (buggy_repo / "mathlib.py").read_text() + (tmp_path / "spec.md").read_text()
+    body = [l[1:].strip() for l in patch.splitlines() if l.startswith("+") and not l.startswith("+++")
+            and l[1:].strip() and not l[1:].strip().startswith("def ") and l[1:].strip() not in seen_anyway]
+    assert "if b == 0:" in body and "quotient_zz = a / b if b else 0" in body
+    for phase in ("localize", "reproduce"):
+        texts = [m["content"] for p, msgs in llm.seen if p == phase for m in msgs]
+        assert any("def clamp_div(a, b, limit)" in t for t in texts), phase
+        assert not any(b in t for b in body for t in texts), phase
+    reproduce_user = next(msgs[1]["content"] for p, msgs in llm.seen if p == "reproduce")
+    assert "body changed: div" in reproduce_user
+    assert "An existing test file for the changed code (test_mathlib.py" in reproduce_user
+
+
+def test_submit_test_ends_reproduce(buggy_repo, tmp_path):
+    submit = reply(calls=[("submit_test", {"content": REPRO.strip("`").removeprefix("python\n")})])
+    llm = FakeLLM(**script(reproduce=[submit]))
+    rv = run(buggy_repo, tmp_path, make_patch(buggy_repo, GOOD), llm)
+    assert rv["verdict"] == "proven", rv
+    assert sum(p == "reproduce" for p, _ in llm.seen) == 1
+
+
+def test_rejected_attempts_are_saved(buggy_repo, tmp_path):
+    rv = run(buggy_repo, tmp_path, make_patch(buggy_repo, GOOD), FakeLLM(**script(reproduce=[PASSING_REPRO])))
+    d = tmp_path / "out" / "repro_attempts"
+    assert rv["verdict"] == "unproven"
+    assert sorted(p.name for p in d.iterdir()) == ["1.log", "1.py", "2.log", "2.py", "3.log", "3.py"]
+    assert (d / "1.log").read_text().startswith("rejected: pytest exit 0")
+    assert "assert True" in (d / "1.py").read_text()

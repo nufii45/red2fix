@@ -158,6 +158,9 @@ SPECS = {
     "write_file": _spec(
         "write_file", "Create or overwrite a file with the given content.", {"path": "string", "content": "string"}, ["path", "content"]
     ),
+    "submit_test": _spec(
+        "submit_test", "Submit the complete test file. This ends your turn.", {"content": "string"}, ["content"]
+    ),
     "run_tests": _spec(
         "run_tests",
         "Run pytest, optionally on a selector like tests/test_x.py::test_y. Returns the exit code and the output tail.",

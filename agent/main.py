@@ -54,6 +54,7 @@ class Run:
         self.root, self.issue, self.number, self.out, self.llm = root, issue, number, out, llm
         self.suite, self.max_seconds = suite, max_seconds
         self.repro = f"tests/test_repro_issue_{number}.py"
+        self.repro_steps = 12
         self.start = time.monotonic()
         self.result = {"status": "running", "phase": None, "abort_reason": None, "iterations": 0, "escalations": 0}
 
@@ -79,7 +80,8 @@ class Run:
     def save(self, name, text):
         (self.out / name).write_text(text)
 
-    def tool_loop(self, phase, system, user, allow, max_steps, protect_tests=False):
+    def tool_loop(self, phase, system, user, allow, max_steps, protect_tests=False, submit=None):
+        """Chat with tools until the model answers without one, or calls `submit` (whose `content` is the answer)."""
         messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
         specs = [tools.SPECS[n] for n in allow]
         for _ in range(max_steps):
@@ -100,13 +102,29 @@ class Run:
                     args = json.loads(tc.function.arguments or "{}")
                 except json.JSONDecodeError:
                     args = None
-                if isinstance(args, dict):
+                if tc.function.name == submit and isinstance(args, dict) and isinstance(args.get("content"), str):
+                    print(f"  tool {submit} ({len(args['content'].splitlines())} lines)", flush=True)
+                    return args["content"]
+                if tc.function.name == submit:
+                    out = f'error: call {submit} with {{"content": "<the complete file>"}}'
+                elif isinstance(args, dict):
                     out = tools.call(self.root, tc.function.name, args, allow, protect_tests)
                 else:
                     out = "error: tool arguments must be a JSON object"
                 print(f"  tool {tc.function.name} {(tc.function.arguments or '')[:150]} -> {out.splitlines()[0][:80] if out else ''}", flush=True)
                 messages.append({"role": "tool", "tool_call_id": tc.id, "content": out})
         # Without the format reminder, REPRODUCE answered with a short note instead of the test file (bench pilot).
+        if submit:
+            messages.append({"role": "user", "content": f"Step limit reached. Stop exploring and call {submit} now with your complete answer."})
+            msg = self.llm.chat(phase, messages, tools=[tools.SPECS[submit]]).choices[0].message
+            for tc in msg.tool_calls or []:
+                try:
+                    content = json.loads(tc.function.arguments or "{}").get("content")
+                except (json.JSONDecodeError, AttributeError):
+                    content = None
+                if tc.function.name == submit and isinstance(content, str):
+                    return content
+            return msg.content or ""
         messages.append({"role": "user", "content": (
             "Step limit reached. Stop exploring and give your final answer now, without tools, "
             "in exactly the format your instructions require."
@@ -129,26 +147,37 @@ def localize(run, extra=""):
     return parse_json(reply) or {"hypothesis": reply}
 
 
-def reproduce(run, loc):
+def save_attempt(run, k, code, reason, out):
+    """Keep every rejected repro attempt, so a failed proof can be diagnosed afterwards."""
+    d = run.out / "repro_attempts"
+    d.mkdir(exist_ok=True)
+    (d / f"{k}.py").write_text(code)
+    (d / f"{k}.log").write_text(f"rejected: {reason}\n\n{out}")
+    print(f"  red rejected: {reason}", flush=True)
+
+
+def reproduce(run, loc, extra=""):
     feedback = ""
-    for _ in range(MAX_REPRO_ATTEMPTS):
+    for k in range(1, MAX_REPRO_ATTEMPTS + 1):
         run.phase("REPRODUCE")
-        user = f"Issue:\n{run.issue}\n\nLocalization:\n{json.dumps(loc)}\n\nWrite the file {run.repro}.{feedback}"
-        code = extract_code(run.tool_loop("reproduce", prompts.REPRODUCE, user, READ, max_steps=12))
+        user = f"Issue:\n{run.issue}\n\nLocalization:\n{json.dumps(loc)}{extra}\n\nWrite the file {run.repro}.{feedback}"
+        reply = run.tool_loop("reproduce", prompts.REPRODUCE, user, READ + ["submit_test"], max_steps=run.repro_steps,
+                              submit="submit_test")
+        code = extract_code(reply)
         tools.write_file(run.root, run.repro, code)
 
         run.phase("VERIFY_RED")
         exit_code, out = tools.run_tests(run.root, run.repro)
         # Exit 1 = tests ran and failed; 0 = passed, 2/4/5 = collection or usage errors.
         if exit_code != 1:
-            print(f"  red rejected: pytest exit {exit_code}", flush=True)
+            save_attempt(run, k, code, f"pytest exit {exit_code}", out)
             feedback = f"\n\nYour previous test did not fail as required (pytest exit {exit_code}):\n{code}\nOutput:\n{out}"
             continue
         # Every repro test must fail now: a passing one either asserts the buggy behaviour
         # (so no correct fix can make the file pass) or proves nothing.
         passed = re.search(r"(\d+) passed", out.strip().splitlines()[-1])
         if passed:
-            print(f"  red rejected: {passed.group(1)} repro test(s) already pass", flush=True)
+            save_attempt(run, k, code, f"{passed.group(1)} repro test(s) already pass", out)
             feedback = (
                 f"\n\nYour previous test was rejected: {passed.group(1)} of its tests already pass on the current code. "
                 f"Every test in the file must fail now and pass after the fix; remove tests that assert the current "
@@ -157,7 +186,7 @@ def reproduce(run, loc):
             continue
         verdict = parse_json(run.ask("verify_red", prompts.VERIFY_RED, f"Issue:\n{run.issue}\n\nTest:\n{code}\n\nOutput:\n{out}")) or {}
         if verdict.get("matches") is False:
-            print(f"  red rejected: {verdict.get('reason', '')}", flush=True)
+            save_attempt(run, k, code, f"wrong reason: {verdict.get('reason', '')}", out)
             feedback = f"\n\nYour previous test failed for the wrong reason ({verdict.get('reason', '')}):\n{code}\nOutput:\n{out}"
             continue
         run.save("repro_test.py", code)
@@ -286,6 +315,7 @@ def run_agent(repo, issue_path, out, number, work, llm=None, suite=(), max_secon
     # A rerun must not inherit the previous run's ledger or logs.
     for name in ARTIFACTS:
         (out / name).unlink(missing_ok=True)
+    shutil.rmtree(out / "repro_attempts", ignore_errors=True)
     prepare(Path(repo), work)
     llm = llm or LLM(ledger_path=out / "ledger.jsonl")
     # Regression scope; paths that don't exist yet (added by a hidden test patch) are dropped.

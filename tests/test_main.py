@@ -193,3 +193,23 @@ def test_suite_scopes_the_regression_check(buggy_repo, tmp_path):
 
     assert result["status"] == "succeeded", result
     assert result["iterations"] == 1
+
+
+def test_step_limit_asks_for_submit_and_falls_back_to_text(buggy_repo, tmp_path, monkeypatch):
+    explore = reply(calls=[("list_files", {})])
+    llm = FakeLLM(**base_script(reproduce=[explore] * 2 + [reply(REPRO)]))
+    run_ = main.Run(buggy_repo, "issue", 1, tmp_path, llm)
+    run_.repro_steps = 2
+    out = run_.tool_loop("reproduce", "s", "u", main.READ + ["submit_test"], 2, submit="submit_test")
+    assert out == REPRO
+    last_phase, last_msgs = llm.seen[-1]
+    assert "call submit_test now" in last_msgs[-1]["content"]
+
+
+def test_bad_submit_args_get_a_clear_error(buggy_repo, tmp_path):
+    bad = reply(calls=[("submit_test", {"code": "x"})])
+    llm = FakeLLM(reproduce=[bad, reply("done")])
+    run_ = main.Run(buggy_repo, "issue", 1, tmp_path, llm)
+    run_.tool_loop("reproduce", "s", "u", main.READ + ["submit_test"], 3, submit="submit_test")
+    tool_msg = [m for m in llm.seen[-1][1] if m.get("role") == "tool"][0]["content"]
+    assert 'call submit_test with {"content"' in tool_msg
