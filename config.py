@@ -18,7 +18,7 @@ ROUTES = {
     "triage": "nano",
     "localize": "ultra",
     "reproduce": "ultra",
-    "verify_red": "nano",
+    "verify_red": "ultra",  # Nano accepted a test that failed on its own bug (bench pilot 3)
     "fix": "super",
     "escalate": "ultra",
     "summarize": "nano",

@@ -236,7 +236,7 @@ def run_review(repo, spec_path, patch_path, out, number, work, llm=None, max_sec
         else:
             listing = "\n".join(paths)
             # Interface visible, implementation hidden: paths, signatures and changed-function names only.
-            shape = pr_context.interface(work, patch, paths)
+            shape, run.new_names = pr_context.interface(work, patch, paths)
             loc = localize(run, f"\n\nFiles changed by the pull request (paths only; the change itself is hidden):\n{listing}{shape}")
             try:
                 _, red = reproduce(run, loc, shape + pr_context.related_test_block(work, paths, run.repro))

@@ -20,14 +20,19 @@ Rules:
   behaviour, and do not add sanity checks that already pass.
 - Import the code the same way the existing tests do (read one first).
 - One or two small test functions. No network, no new dependencies.
+- If you are given the interface of the change, call the functions it lists (directly, or through the public
+  function that calls them) and use any new parameters it shows, the way the fixed code is meant to be called.
 You may use the tools to read code. When the file is ready, call submit_test with its complete content
 (if you can't call tools, reply with the file in a single ```python block)."""
 
-VERIFY_RED = """You check whether a failing test really reproduces a bug report.
-"matches" is true only if the test fails because of the bug described in the issue (the wrong value or
-the reported exception). It is false for an ImportError, NameError, SyntaxError, fixture error, or a
-mistake in the test itself.
-Reply with only JSON: {"matches": true or false, "reason": "<one sentence>"}"""
+VERIFY_RED = """You check whether a failing test file really reproduces a bug report.
+Judge each failing test on its own. A test "matches" only if it fails because of the bug or missing
+behaviour described in the issue (the wrong value, the reported exception, or the missing feature). It does
+not match if it fails because of an ImportError, NameError, SyntaxError, fixture error, or a mistake in the
+test itself (wrong setup, wrong types, a helper that raises on purpose).
+Reply with only JSON:
+{"tests": [{"name": "<test function>", "matches": true or false, "reason": "<one sentence>"}],
+ "matches": true or false (true only if every failing test matches)}"""
 
 FIX = """You fix a bug in a Python repository. A reproduction test already fails because of the bug.
 Change the source code so that test passes without breaking any other test.

@@ -213,3 +213,66 @@ def test_bad_submit_args_get_a_clear_error(buggy_repo, tmp_path):
     run_.tool_loop("reproduce", "s", "u", main.READ + ["submit_test"], 3, submit="submit_test")
     tool_msg = [m for m in llm.seen[-1][1] if m.get("role") == "tool"][0]["content"]
     assert 'call submit_test with {"content"' in tool_msg
+
+
+def red(buggy_repo, body):
+    """Real pytest output for a repro file with this body (imports div from the fixture's mathlib)."""
+    path = "tests/test_repro_issue_1.py"
+    tools.write_file(buggy_repo, path, "import json, io, pytest\nfrom mathlib import div\n\n" + body)
+    code, out = tools.run_tests(buggy_repo, path)
+    assert code == 1, out
+    return out, path
+
+
+@pytest.mark.parametrize("body", [
+    "def test_r():\n    assert div(6, 3) == 3\n",                                    # assertion: fine
+    "def test_r():\n    with pytest.raises(ValueError):\n        div(6, 3)\n",          # DID NOT RAISE: fine
+    "def test_r():\n    div(1, 0)\n",                                                  # raised in the code: fine
+])
+def test_red_from_the_code_is_not_broken(buggy_repo, body):
+    out, path = red(buggy_repo, body)
+    assert main.broken_test(out, path) is None
+
+
+def test_exception_inside_the_test_is_broken(buggy_repo):
+    out, path = red(buggy_repo, "def test_r():\n    json.dump({'a': 1}, io.BytesIO())\n    assert div(1, 0) is None\n")
+    reason = main.broken_test(out, path)
+    assert reason.startswith("the test is broken, not the code: TypeError raised in the test itself")
+
+
+def test_missing_new_api_on_base_is_the_expected_red(buggy_repo):
+    out, path = red(buggy_repo, "def test_r():\n    assert div(1, 0, default=None) is None\n")
+    assert main.broken_test(out, path, {"default"}) is None       # the PR adds `default`
+    assert main.broken_test(out, path, {"other"}) is not None     # not something the PR adds
+
+
+def test_broken_test_is_rejected_before_verify_red(buggy_repo, tmp_path):
+    broken = reply("```python\nimport io, json\nfrom mathlib import div\n\n\ndef test_repro():\n"
+                   "    json.dump({'a': 1}, io.BytesIO())\n    assert div(1, 0) is None\n```")
+    llm = FakeLLM(**base_script(reproduce=[broken, reply(REPRO)]))
+    result = run(buggy_repo, tmp_path, llm)
+    assert result["status"] == "succeeded", result
+    assert sum(phase == "verify_red" for phase, _ in llm.seen) == 1  # only the good attempt reached the model
+    assert "the test is broken" in (tmp_path / "out" / "repro_attempts" / "1.log").read_text()
+
+
+def test_verify_red_judges_each_test(buggy_repo, tmp_path):
+    one_wrong = reply('{"tests": [{"name": "test_repro", "matches": true}, {"name": "test_x", "matches": false, '
+                      '"reason": "wrong setup"}], "matches": true}')
+    llm = FakeLLM(**base_script(verify_red=[one_wrong, reply('{"matches": true}')]))
+    result = run(buggy_repo, tmp_path, llm)
+    assert result["status"] == "succeeded"
+    assert "test_x: wrong setup" in (tmp_path / "out" / "repro_attempts" / "1.log").read_text()
+
+
+def test_step_budget_is_shown_and_only_submit_is_offered_at_the_end(buggy_repo, tmp_path):
+    explore = reply(calls=[("list_files", {})])
+    seen_tools = []
+    llm = FakeLLM(reproduce=[explore] * 5 + [reply(REPRO)])
+    chat = llm.chat
+    llm.chat = lambda phase, messages, **kw: seen_tools.append([t["function"]["name"] for t in kw.get("tools", [])]) or chat(phase, messages, **kw)
+    run_ = main.Run(buggy_repo, "issue", 1, tmp_path, llm)
+    run_.tool_loop("reproduce", "s", "u", main.READ + ["submit_test"], 5, submit="submit_test")
+    assert seen_tools[0] == main.READ + ["submit_test"] and seen_tools[3] == seen_tools[4] == ["submit_test"]
+    tool_msgs = [m["content"] for m in llm.seen[-1][1] if m.get("role") == "tool"]
+    assert "[4 tool steps left." in tool_msgs[0] and "call submit_test now" in tool_msgs[-1]

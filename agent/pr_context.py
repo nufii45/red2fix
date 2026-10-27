@@ -48,7 +48,7 @@ def changed_lines(patch):
 
 
 def signatures(source):
-    """{qualified name: (signature text, first line, last line)} for every def and class."""
+    """{qualified name: (signature text, first line, last line, parameter names)} for every def and class."""
     found = {}
 
     def visit(node, prefix):
@@ -57,12 +57,14 @@ def signatures(source):
                 name = f"{prefix}{child.name}"
                 ret = f" -> {ast.unparse(child.returns)}" if child.returns else ""
                 kw = "async def" if isinstance(child, ast.AsyncFunctionDef) else "def"
-                found[name] = (f"{kw} {name}({ast.unparse(child.args)}){ret}", child.lineno, child.end_lineno)
+                a = child.args
+                params = {x.arg for x in a.posonlyargs + a.args + a.kwonlyargs + [a.vararg, a.kwarg] if x} - {"self", "cls"}
+                found[name] = (f"{kw} {name}({ast.unparse(child.args)}){ret}", child.lineno, child.end_lineno, params)
                 visit(child, f"{name}.")
             elif isinstance(child, ast.ClassDef):
                 name = f"{prefix}{child.name}"
                 bases = ", ".join(ast.unparse(b) for b in child.bases + child.keywords)
-                found[name] = (f"class {name}({bases})" if bases else f"class {name}", child.lineno, child.end_lineno)
+                found[name] = (f"class {name}({bases})" if bases else f"class {name}", child.lineno, child.end_lineno, set())
                 visit(child, f"{name}.")
 
     visit(ast.parse(source), "")
@@ -70,7 +72,7 @@ def signatures(source):
 
 
 def innermost(defs, line):
-    hits = [(end - start, name) for name, (_, start, end) in defs.items() if start <= line <= end]
+    hits = [(end - start, name) for name, (_, start, end, _) in defs.items() if start <= line <= end]
     return min(hits)[1] if hits else None
 
 
@@ -90,11 +92,15 @@ def head_sources(root, patch, paths):
 
 
 def interface(root, patch, paths):
-    """Text block listing the PR's interface changes, or "" if there is nothing to show."""
+    """(text block listing the PR's interface changes or "", names the PR adds).
+
+    The names are new defs and classes plus parameters a def gains: a test that uses them fails on base with
+    TypeError/AttributeError/ImportError in the test file itself, which is the expected red for such a PR.
+    """
     paths = source_paths(paths)
     heads = head_sources(root, patch, paths)
     lines = changed_lines(patch)
-    out = []
+    out, names = [], set()
     for p in paths:
         try:
             base_file = Path(root) / p
@@ -102,16 +108,18 @@ def interface(root, patch, paths):
             head = signatures(heads[p]) if p in heads else {}
         except (SyntaxError, ValueError, UnicodeDecodeError):
             continue  # old or unparsable code: show nothing rather than guess
-        resigned = [n for n, (sig, _, _) in head.items() if n not in base or base[n][0] != sig]
+        resigned = [n for n, (sig, *_) in head.items() if n not in base or base[n][0] != sig]
+        for n in resigned:
+            names |= ({n.split(".")[-1]} if n not in base else set()) | (head[n][3] - (base[n][3] if n in base else set()))
         removed, added = lines.get(p, (set(), set()))
         bodies = {innermost(head, n) for n in added} | {innermost(base, n) for n in removed}
         bodies = sorted(b for b in bodies if b and b not in resigned)
         out += [f"{p}: changed signature: {head[n][0]}" for n in resigned]
         out += [f"{p}: body changed: {', '.join(bodies)}"] if bodies else []
     if not out:
-        return ""
+        return "", names
     return ("\n\nInterface of the pull request (signatures and names only; the implementation is hidden):\n"
-            + "\n".join(out))
+            + "\n".join(out)), names
 
 
 def module_names(path):

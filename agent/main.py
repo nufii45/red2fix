@@ -55,6 +55,7 @@ class Run:
         self.suite, self.max_seconds = suite, max_seconds
         self.repro = f"tests/test_repro_issue_{number}.py"
         self.repro_steps = 12
+        self.new_names = set()  # names the PR adds (review mode); calling them may fail inside the test on base
         self.start = time.monotonic()
         self.result = {"status": "running", "phase": None, "abort_reason": None, "iterations": 0, "escalations": 0}
 
@@ -84,9 +85,12 @@ class Run:
         """Chat with tools until the model answers without one, or calls `submit` (whose `content` is the answer)."""
         messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
         specs = [tools.SPECS[n] for n in allow]
-        for _ in range(max_steps):
+        for step in range(max_steps):
             self.check_time()
-            msg = self.llm.chat(phase, messages, tools=specs).choices[0].message
+            left = max_steps - step
+            # Bench pilot 3: REPRODUCE explored until the limit and never wrote the file. Near the end, only submit.
+            offered = [tools.SPECS[submit]] if submit and left <= 2 else specs
+            msg = self.llm.chat(phase, messages, tools=offered).choices[0].message
             if not msg.tool_calls:
                 return msg.content or ""
             messages.append({
@@ -102,7 +106,7 @@ class Run:
                     args = json.loads(tc.function.arguments or "{}")
                 except json.JSONDecodeError:
                     args = None
-                if tc.function.name == submit and isinstance(args, dict) and isinstance(args.get("content"), str):
+                if tc.function.name == submit and isinstance(args, dict) and str(args.get("content") or "").strip():
                     print(f"  tool {submit} ({len(args['content'].splitlines())} lines)", flush=True)
                     return args["content"]
                 if tc.function.name == submit:
@@ -112,6 +116,9 @@ class Run:
                 else:
                     out = "error: tool arguments must be a JSON object"
                 print(f"  tool {tc.function.name} {(tc.function.arguments or '')[:150]} -> {out.splitlines()[0][:80] if out else ''}", flush=True)
+                if submit:
+                    out += (f"\n\n[{left - 1} tool steps left. Call {submit} with the complete file before they run out.]"
+                            if left - 1 > 2 else f"\n\n[{left - 1} tool steps left: call {submit} now with your best complete file.]")
                 messages.append({"role": "tool", "tool_call_id": tc.id, "content": out})
         # Without the format reminder, REPRODUCE answered with a short note instead of the test file (bench pilot).
         if submit:
@@ -122,7 +129,7 @@ class Run:
                     content = json.loads(tc.function.arguments or "{}").get("content")
                 except (json.JSONDecodeError, AttributeError):
                     content = None
-                if tc.function.name == submit and isinstance(content, str):
+                if tc.function.name == submit and isinstance(content, str) and content.strip():
                     return content
             return msg.content or ""
         messages.append({"role": "user", "content": (
@@ -145,6 +152,43 @@ def localize(run, extra=""):
     user = f"Issue:\n{run.issue}\n\nRepository files:\n{tools.list_files(run.root)}{extra}"
     reply = run.tool_loop("localize", prompts.LOCALIZE, user, READ, max_steps=12)
     return parse_json(reply) or {"hypothesis": reply}
+
+
+FAILURE_HEADER = re.compile(r"^_{3,} (.+?) _{3,}$")
+FRAME = re.compile(r"^(\S+?\.py):(\d+): ?(\w[\w.]*)?$")  # "path:line: " per frame, "path:line: Exc" on the last
+EXPECTED = {"AssertionError", "Failed"}  # Failed: pytest.raises(...) "DID NOT RAISE", or pytest.fail()
+MISSING_API = {"TypeError", "AttributeError", "ImportError", "ModuleNotFoundError"}
+
+
+def broken_test(out, repro, new_names=()):
+    """Reason the red is the test's own fault, or None.
+
+    For each failure, take the innermost traceback frame inside the repository (relative path; stdlib and
+    site-packages frames have absolute paths, so a test misusing json.dump still lands on the test line).
+    If that frame is in the repro file and the exception is not an assertion, the test itself is broken,
+    unless it is the PR's new API missing on base (e.g. "unexpected keyword argument 'text'").
+    """
+    sections, current = [], None
+    for line in out.splitlines():
+        if FAILURE_HEADER.match(line):
+            current = []
+            sections.append(current)
+        elif current is not None:
+            current.append(line)
+    for lines in sections:
+        frames = [m.groups() for l in lines if (m := FRAME.match(l))]
+        exc = next((e for _, _, e in reversed(frames) if e), None)
+        local = [(p, n) for p, n, _ in frames if not p.startswith("/")]
+        if not exc or not local:
+            continue
+        path, lineno = local[-1]
+        if not path.endswith(repro) or exc.split(".")[-1] in EXPECTED:
+            continue
+        message = " ".join(l for l in lines if l.startswith("E "))
+        if exc.split(".")[-1] in MISSING_API and set(re.findall(r"'(\w+)'", message)) & set(new_names):
+            continue
+        return f"the test is broken, not the code: {exc} raised in the test itself ({path}:{lineno})"
+    return None
 
 
 def save_attempt(run, k, code, reason, out):
@@ -184,9 +228,17 @@ def reproduce(run, loc, extra=""):
                 f"buggy behaviour or that already pass.\n{code}\nOutput:\n{out}"
             )
             continue
+        broken = broken_test(out, run.repro, run.new_names)
+        if broken:
+            save_attempt(run, k, code, broken, out)
+            feedback = f"\n\nYour previous test was rejected: {broken}. Fix the test.\n{code}\nOutput:\n{out}"
+            continue
         verdict = parse_json(run.ask("verify_red", prompts.VERIFY_RED, f"Issue:\n{run.issue}\n\nTest:\n{code}\n\nOutput:\n{out}")) or {}
-        if verdict.get("matches") is False:
-            save_attempt(run, k, code, f"wrong reason: {verdict.get('reason', '')}", out)
+        wrong = [t for t in verdict.get("tests") or [] if isinstance(t, dict) and t.get("matches") is False]
+        if verdict.get("matches") is False or wrong:
+            reason = "; ".join(f"{t.get('name')}: {t.get('reason', '')}" for t in wrong) or verdict.get("reason", "")
+            save_attempt(run, k, code, f"wrong reason: {reason}", out)
+            verdict["reason"] = reason
             feedback = f"\n\nYour previous test failed for the wrong reason ({verdict.get('reason', '')}):\n{code}\nOutput:\n{out}"
             continue
         run.save("repro_test.py", code)
