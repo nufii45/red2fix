@@ -60,3 +60,9 @@ def test_git_dir_is_off_limits(buggy_repo):
     with pytest.raises(ValueError, match="inside .git"):
         tools.read_file(buggy_repo, ".git/HEAD")
     assert "inside .git" in tools.call(buggy_repo, "read_file", {"path": ".git/config"}, ["read_file"])
+
+
+def test_list_files_under_a_directory(buggy_repo):
+    assert tools.list_files(buggy_repo, "mathlib.py").strip() == "mathlib.py"
+    assert tools.list_files(buggy_repo, "nope") == "(no files)"
+    assert "test_mathlib.py" in tools.call(buggy_repo, "list_files", {}, ["list_files"])

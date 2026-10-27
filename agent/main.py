@@ -106,7 +106,11 @@ class Run:
                     out = "error: tool arguments must be a JSON object"
                 print(f"  tool {tc.function.name} {(tc.function.arguments or '')[:150]} -> {out.splitlines()[0][:80] if out else ''}", flush=True)
                 messages.append({"role": "tool", "tool_call_id": tc.id, "content": out})
-        messages.append({"role": "user", "content": "Step limit reached. Give your final answer now, without tools."})
+        # Without the format reminder, REPRODUCE answered with a short note instead of the test file (bench pilot).
+        messages.append({"role": "user", "content": (
+            "Step limit reached. Stop exploring and give your final answer now, without tools, "
+            "in exactly the format your instructions require."
+        )})
         return self.llm.chat(phase, messages).choices[0].message.content or ""
 
 
@@ -130,7 +134,7 @@ def reproduce(run, loc):
     for _ in range(MAX_REPRO_ATTEMPTS):
         run.phase("REPRODUCE")
         user = f"Issue:\n{run.issue}\n\nLocalization:\n{json.dumps(loc)}\n\nWrite the file {run.repro}.{feedback}"
-        code = extract_code(run.tool_loop("reproduce", prompts.REPRODUCE, user, READ, max_steps=8))
+        code = extract_code(run.tool_loop("reproduce", prompts.REPRODUCE, user, READ, max_steps=12))
         tools.write_file(run.root, run.repro, code)
 
         run.phase("VERIFY_RED")

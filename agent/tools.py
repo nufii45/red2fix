@@ -43,8 +43,9 @@ def _run(root, args, timeout=CMD_TIMEOUT, input=None):
     )
 
 
-def list_files(root):
-    return _truncate(_run(root, ["git", "ls-files"]).stdout, keep="head")
+def list_files(root, path=""):
+    # Models ask for a directory's files often; without `path` each such call was a wasted error step.
+    return _truncate(_run(root, ["git", "ls-files", "--", path] if path else ["git", "ls-files"]).stdout, keep="head") or "(no files)"
 
 
 def read_file(root, path, start=1, end=None):
@@ -136,7 +137,9 @@ def _spec(name, description, props, required):
 
 
 SPECS = {
-    "list_files": _spec("list_files", "List the files tracked in the repository.", {}, []),
+    "list_files": _spec(
+        "list_files", "List the files tracked in the repository, optionally only under a directory.", {"path": "string"}, []
+    ),
     "read_file": _spec(
         "read_file",
         "Read a file with line numbers. Optional 1-based start and end lines.",
