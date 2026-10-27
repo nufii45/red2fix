@@ -224,3 +224,10 @@ def test_renamed_signature_is_not_a_deletion():
 def test_changed_paths_include_new_and_deleted_files():
     diff = "--- /dev/null\n+++ b/new.py\n@@ -0,0 +1 @@\n+x\n--- a/old.py\n+++ /dev/null\n@@ -1 +0,0 @@\n-x\n"
     assert review.changed_paths(diff) == ["new.py", "old.py"]
+
+
+def test_pr_description_spec_caps_proven_at_needs_review():
+    assert review.decide("proven", set(), [], [], STRICT, "pr_description")[0] == "needs_review"
+    assert review.decide("proven", set(), [], [], STRICT, "issue#2")[0] == "proven"
+    # The cap never lifts anything: worse verdicts stay what they were.
+    assert review.decide("doesnt_fix", set(), [], [], STRICT, "pr_description")[0] == "doesnt_fix"

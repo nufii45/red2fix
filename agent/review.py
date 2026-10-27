@@ -26,7 +26,7 @@ LABELS = {
 TEST_RULE = "No weakened, skipped, xfailed or deleted tests"
 
 
-def decide(proof, new_failures, findings, restricted_touched, policy):
+def decide(proof, new_failures, findings, restricted_touched, policy, spec_source="spec_file"):
     """(verdict, reason). Proof and regression come from pytest; findings can only lower the verdict.
 
     proof: "proven" (red on base, green on head), "doesnt_fix", "unproven" or "error".
@@ -47,6 +47,9 @@ def decide(proof, new_failures, findings, restricted_touched, policy):
         return "needs_review", "; ".join(why)
     if proof == "unproven":
         return "unproven", "no failing test; require_proof is off"
+    if spec_source == "pr_description":
+        # The author wrote both the claim and the fix, so the proof only shows the PR does what it says.
+        return "needs_review", "proven against the PR's own description; link an issue for a full ✅"
     return "proven", "red on base, green on head, no new failures, no blockers"
 
 
@@ -237,7 +240,8 @@ def run_review(repo, spec_path, patch_path, out, number, work, llm=None, max_sec
         rv["dropped_findings"] = review.get("dropped", [])
 
         run.phase("VERDICT")
-        rv["verdict"], rv["verdict_reason"] = decide(proof, new_failures, rv["findings"], rv["restricted_paths_touched"], policy)
+        rv["verdict"], rv["verdict_reason"] = decide(
+            proof, new_failures, rv["findings"], rv["restricted_paths_touched"], policy, spec_source)
         run.phase("DONE")
     except Abort as e:
         rv.update(verdict="error", verdict_reason=str(e))

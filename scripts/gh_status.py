@@ -8,6 +8,7 @@ A missing or unreadable review.json sets `error`, so the gate fails closed.
 import json
 import os
 import sys
+import urllib.error
 import urllib.request
 
 CONTEXT = "red2fix/verdict"
@@ -39,6 +40,8 @@ def status_for(arg):
         state, label = STATES.get(verdict, ("error", f"Unknown verdict {verdict}"))
     reason = review.get("verdict_reason") or ""
     text = f"{label}: {reason}" if reason else label
+    # GitHub answers 422 to 4-byte characters (e.g. 🔶) in a status description.
+    text = "".join(c for c in text if ord(c) <= 0xFFFF)
     return state, text if len(text) < 140 else text[:138] + "…"
 
 
@@ -50,7 +53,10 @@ def main():
         data=json.dumps(body).encode(), method="POST",
         headers={"Authorization": f"Bearer {os.environ['GH_TOKEN']}", "Accept": "application/vnd.github+json"},
     )
-    urllib.request.urlopen(req, timeout=30).close()
+    try:
+        urllib.request.urlopen(req, timeout=30).close()
+    except urllib.error.HTTPError as e:
+        sys.exit(f"GitHub refused the status ({e.code}): {e.read().decode(errors='replace')}")
     print(f"{CONTEXT}: {state} - {description}")
 
 

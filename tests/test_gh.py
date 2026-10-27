@@ -53,3 +53,10 @@ def test_spec_prefers_the_linked_issue():
 def test_spec_falls_back_to_the_pr_description():
     text, source = gh_spec.spec_for({"title": "Fix it", "body": None}, lambda n: pytest.fail("no fetch"))
     assert (text, source) == ("# Fix it\n\n\n", "pr_description")
+
+
+@pytest.mark.parametrize("verdict", ["proven", "needs_review", "unproven", "doesnt_fix", "breaks_tests", "error"])
+def test_description_has_no_4_byte_characters(tmp_path, verdict):
+    # GitHub rejects 🔶 and other characters outside the BMP with a 422.
+    _, text = gh_status.status_for(review(tmp_path, verdict=verdict, verdict_reason="restricted path: 🔶 x"))
+    assert all(ord(c) <= 0xFFFF for c in text)
