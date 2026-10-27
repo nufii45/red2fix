@@ -41,7 +41,7 @@ def status_for(arg):
     reason = review.get("verdict_reason") or ""
     text = f"{label}: {reason}" if reason else label
     # GitHub answers 422 to 4-byte characters (e.g. 🔶) in a status description.
-    text = "".join(c for c in text if ord(c) <= 0xFFFF)
+    text = "".join(c for c in text if ord(c) <= 0xFFFF).strip()
     return state, text if len(text) < 140 else text[:138] + "…"
 
 

@@ -59,4 +59,4 @@ def test_spec_falls_back_to_the_pr_description():
 def test_description_has_no_4_byte_characters(tmp_path, verdict):
     # GitHub rejects 🔶 and other characters outside the BMP with a 422.
     _, text = gh_status.status_for(review(tmp_path, verdict=verdict, verdict_reason="restricted path: 🔶 x"))
-    assert all(ord(c) <= 0xFFFF for c in text)
+    assert all(ord(c) <= 0xFFFF for c in text) and text == text.strip()
