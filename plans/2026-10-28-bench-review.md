@@ -63,3 +63,11 @@ Pilot numbers are in DECISIONS.md, and the full run is either finished or launch
 - agent.review gains --suite (same rule as main: paths missing on base are dropped).
 - Review mode overrides the bench image's entrypoint (/opt/r2f/bin/python -m agent.review) and never
   passes the test_patch; restricted_paths stay at the defaults on the bench.
+- After the user chose to probe S3: 81 of 84 Lite systems keep artifacts at
+  s3://swe-bench-submissions/lite/<system>/logs/<instance>/{patch.diff,report.json}, public over HTTPS.
+  failed_patches.py takes report.json's official `patch_successfully_applied` and `resolved: false`,
+  strongest system first. All 20 instances got one (9 systems; ExpeRepair + Claude 4 Sonnet gave 10).
+- Caveat: 5 failed patches carry extras that are easy to reject (pytest-7432 a root test file, astropy-12907
+  pyproject.toml, pylint-7080 reproduce_issue.py, seaborn-3010 a test edit, seaborn-3190 .gitignore).
+  Kept as the officially evaluated patches; report false approvals with and without them.
+- No gold patch touches a default restricted path.
