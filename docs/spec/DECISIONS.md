@@ -20,6 +20,10 @@ Newest last. One line each; the reasoning lives in [ARCHITECTURE.md](ARCHITECTUR
 - 2026-10-22: Benchmark sandboxes are thin layers on the official amd64 instance images, run under emulation on the arm64 Mac. The agent brings its own Python 3.11 and works in place in `/testbed` (editable install), and tests run with the image's testbed env.
 - 2026-10-22: On benchmark runs, the regression check (BASELINE/CHECK) is scoped to the test files the official test patch touches, because full suites are too slow under emulation. The model never sees this list. Known gap: network-dependent tests (e.g. requests → httpbin.org) can flake between baseline and check.
 - 2026-10-22: Dashboard is Streamlit reading the run folders in `out/` directly, no database; localhost only, telemetry off, nothing hosted. Live progress comes from `events.jsonl`, which the agent writes into its bind-mounted `out`. It is read-only unless `RED2FIX_ENABLE_LAUNCH=1`, which adds a one-run-at-a-time launcher for demo issues. Supersedes the SQLite part of ARCHITECTURE.md.
+- 2026-10-27: Red2Fix leads with proven PR review; bug fixing becomes the suggest-fix bonus. See red2fix-prd.md.
+- 2026-10-27: Review input is a unified diff applied to the base checkout, not two refs. The tree stays at base through REPRODUCE so the model cannot read the PR's changes; SWE-bench patches and GitHub PRs share one input.
+- 2026-10-27: The review LLM can only downgrade a verdict. Proof and regression come from pytest.
+- 2026-10-27: Policy is .red2fix.toml read from the base checkout (stdlib tomllib).
 
 ## Hour-zero results
 

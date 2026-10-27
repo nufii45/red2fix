@@ -4,3 +4,4 @@ __pycache__/
 .env
 out/
 logs/
+red2fix/
