@@ -261,9 +261,9 @@ def check(run, baseline):
     return None
 
 
-def fix(run, loc, repro_code, red_out, baseline):
+def fix(run, loc, repro_code, red_out, baseline, feedback=None):
     hypothesis = loc.get("hypothesis", "")
-    feedback = f"The reproduction test currently fails:\n{red_out}"
+    feedback = feedback or f"The reproduction test currently fails:\n{red_out}"
     history = []
     for i in range(1, config.MAX_FIX_ITERS + 1):
         run.result["iterations"] = i
@@ -359,7 +359,7 @@ def prepare(repo, work):
 
 
 ARTIFACTS = ["result.json", "events.jsonl", "ledger.jsonl", "repro_test.py", "red.log", "green.log", "patch.diff", "summary.md",
-             "review.json", "review.md", "head.log"]
+             "review.json", "review.md", "head.log", "suggested_fix.diff"]
 
 
 def run_agent(repo, issue_path, out, number, work, llm=None, suite=(), max_seconds=config.MAX_SECONDS):

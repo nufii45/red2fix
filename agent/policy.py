@@ -18,6 +18,9 @@ DEFAULTS = {
     # "blocker": a quoted unrelated change to non-test code blocks, whatever severity the reviewer gave it.
     "unrelated_change": "blocker",
     "budget_usd": 1.00,
+    # Off by default: it spends up to suggest_fix_budget_usd more on every PR that fails.
+    "suggest_fix": False,
+    "suggest_fix_budget_usd": 0.75,
 }
 
 

@@ -18,7 +18,7 @@ import config
 from agent import guards, pr_context, prompts, tools
 from agent import policy as policies
 from agent.llm import LLM, BudgetExceeded
-from agent.main import ARTIFACTS, Abort, Run, git, localize, parse_json, prepare, reproduce
+from agent.main import ARTIFACTS, Abort, Run, check, fix, git, localize, parse_json, prepare, reproduce
 
 SEVERITIES = ("blocker", "warning", "info")
 LABELS = {
@@ -99,6 +99,46 @@ def decide(proof, new_failures, findings, restricted_touched, policy, spec_sourc
         # The author wrote both the claim and the fix, so the proof only shows the PR does what it says.
         return "needs_review", "proven against the PR's own description; link an issue for a full ✅"
     return "proven", "red on base, green on head, no new failures, no blockers"
+
+
+def still_failing(run, baseline):
+    """(repro fails, new failing suite tests) at the current tree."""
+    code, _ = tools.run_tests(run.root, run.repro)
+    return code != 0, tools.failing_tests(run.root, *run.suite, f"--ignore={run.repro}") - baseline
+
+
+def suggest_fix(run, policy, loc, repro_code, baseline):
+    """{"status": "proven" | "failed", "reason"}: the FIX loop on top of the PR head, then CONFIRM from a clean
+    head: something fails without the suggestion, and with it the repro passes and nothing new fails.
+    Writes suggested_fix.diff when proven. Never raises: a failed suggestion must not change the review.
+    """
+    run.llm.max_usd = run.llm.spent + policy["suggest_fix_budget_usd"]  # its own cap on top of the review's spend
+    run.max_seconds = time.monotonic() - run.start + config.SUGGEST_SECONDS
+    try:
+        fix(run, loc, repro_code, "", baseline, feedback=check(run, baseline))
+        run.phase("CONFIRM")
+        diff = tools.git_diff(run.root)
+        git(run.root, "reset", "--hard", "-q")
+        git(run.root, "clean", "-fdq")
+        repro_red, broken = still_failing(run, baseline)
+        if not (repro_red or broken):
+            raise Abort("confirm_failed: nothing fails on the PR head without the suggestion")
+        applied = tools.apply_patch(run.root, diff)
+        if applied != "applied":
+            raise Abort(f"confirm_failed: {applied}")
+        repro_red, broken = still_failing(run, baseline)
+        if repro_red or broken:
+            raise Abort(f"confirm_failed: with the suggestion, repro {'fails' if repro_red else 'passes'}, "
+                        f"new failures: {', '.join(sorted(broken)) or 'none'}")
+        run.save("suggested_fix.diff", diff)
+        return {"status": "proven", "reason": "repro passes and no new failures with the suggestion"}
+    except BudgetExceeded:
+        return {"status": "failed", "reason": "suggest_fix_budget_usd"}
+    except Abort as e:
+        return {"status": "failed", "reason": str(e)}
+    except Exception as e:
+        traceback.print_exc()
+        return {"status": "failed", "reason": f"error:{type(e).__name__}: {e}"}
 
 
 def changed_paths(diff):
@@ -217,6 +257,11 @@ def render_md(rv, out):
             lines.append(f"| {cell(f.get('severity'))} | {cell(f.get('rule'))} | {cell(where)} | {cell(f.get('note'))} |")
     mix = " / ".join(f"{k.title()} {n}" for k, n in rv["calls"].items() if n) or "no model calls"
     lines += ["", f"**Cost:** ${rv['cost_usd']:.2f} · {int(rv['seconds'])}s · {mix}"]
+    suggestion = out / "suggested_fix.diff"
+    if (rv.get("suggested_fix") or {}).get("status") == "proven" and suggestion.exists():
+        lines += ["", "**Suggested fix (proven)**: the repro test passes and no existing test breaks with this on top of "
+                  "the PR. It does not change the verdict and was not pushed.", "",
+                  "```diff", suggestion.read_text().rstrip(), "```"]
     repro = out / "repro_test.py"
     if repro.exists():
         lines += ["", "<details><summary>Repro test</summary>", "", "```python", repro.read_text().rstrip(), "```", "", "</details>"]
@@ -230,6 +275,7 @@ def run_review(repo, spec_path, patch_path, out, number, work, llm=None, max_sec
         (out / name).unlink(missing_ok=True)
     shutil.rmtree(out / "repro_attempts", ignore_errors=True)
     run = Run(work, "", number, out, llm, max_seconds=max_seconds)
+    repro_code = loc = None
     run.repro = f"tests/test_repro_pr_{number}.py"
     run.repro_steps = repro_steps
     rv = {
@@ -251,7 +297,7 @@ def run_review(repo, spec_path, patch_path, out, number, work, llm=None, max_sec
         rv["restricted_paths_touched"] = policies.restricted(paths, policy["restricted_paths"])
         rv["base_sha"] = git(work, "rev-parse", "HEAD").strip()
         # Regression scope, as in main.run_agent; paths that don't exist on base are dropped.
-        suite = [s for s in suite if (work / s.split("::")[0]).exists()]
+        suite = run.suite = [s for s in suite if (work / s.split("::")[0]).exists()]
 
         run.phase("TRIAGE")
         triage = parse_json(run.ask("triage_review", prompts.TRIAGE_REVIEW, f"<spec>\n{run.issue}\n</spec>")) or {}
@@ -269,7 +315,7 @@ def run_review(repo, spec_path, patch_path, out, number, work, llm=None, max_sec
             shape, run.new_names = pr_context.interface(work, patch, paths)
             loc = localize(run, f"\n\nFiles changed by the pull request (paths only; the change itself is hidden):\n{listing}{shape}")
             try:
-                _, red = reproduce(run, loc, shape + pr_context.related_test_block(work, paths, run.repro))
+                repro_code, red = reproduce(run, loc, shape + pr_context.related_test_block(work, paths, run.repro))
             except Abort as e:
                 if str(e) != "no_repro":
                     raise
@@ -317,6 +363,9 @@ def run_review(repo, spec_path, patch_path, out, number, work, llm=None, max_sec
         rv["proof"]["result"] = proof  # lets bench/report_review.py recompute verdicts under other policies
         rv["verdict"], rv["verdict_reason"] = decide(
             proof, new_failures, rv["findings"], rv["restricted_paths_touched"], policy, spec_source)
+        # Only with a repro to fix against (unproven has none). The verdict is final before this runs.
+        if policy["suggest_fix"] and rv["verdict"] in ("doesnt_fix", "breaks_tests") and repro_code:
+            rv["suggested_fix"] = suggest_fix(run, policy, loc, repro_code, baseline)
         run.phase("DONE")
     except Abort as e:
         rv.update(verdict="error", verdict_reason=str(e))

@@ -5,7 +5,8 @@ import pytest
 from agent import guards, review
 from agent.main import git
 from agent.policy import DEFAULTS
-from test_main import REPRO, FakeLLM, reply
+import config
+from test_main import REPRO, FakeLLM, edit, reply
 
 FIXED = "    if b == 0:\n        return None\n    return a / b"
 GOOD = [("mathlib.py", "    return a / b", FIXED)]
@@ -62,6 +63,50 @@ def test_verdicts(buggy_repo, tmp_path, edits, verdict):
     assert review.LABELS[verdict] in (out / "review.md").read_text()
     phases = [json.loads(l)["name"] for l in (out / "events.jsonl").read_text().splitlines() if '"phase"' in l]
     assert phases[-4:] == ["HEAD_CHECK", "REVIEW", "VERDICT", "DONE"]
+
+
+def opt_in_suggest_fix(repo):
+    (repo / ".red2fix.toml").write_text("suggest_fix = true\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-qm", "policy")
+
+
+@pytest.mark.parametrize("edits,head_line,verdict", [
+    (NO_FIX, "    return float(a) / b", "doesnt_fix"),
+    (BREAKS, "    return None", "breaks_tests"),
+])
+def test_suggested_fix_is_proven_and_leaves_the_verdict(buggy_repo, tmp_path, edits, head_line, verdict):
+    opt_in_suggest_fix(buggy_repo)
+    llm = FakeLLM(**script(fix=[edit("mathlib.py", head_line, FIXED), reply("guarded b == 0")]))
+    rv = run(buggy_repo, tmp_path, make_patch(buggy_repo, edits), llm)
+
+    assert rv["verdict"] == verdict and rv["suggested_fix"]["status"] == "proven", rv
+    diff = (tmp_path / "out" / "suggested_fix.diff").read_text()
+    assert f"-{head_line}" in diff and "+    if b == 0:" in diff  # on top of the PR head, not base
+    md = (tmp_path / "out" / "review.md").read_text()
+    assert "**Suggested fix (proven)**" in md and "```diff" in md and review.LABELS[verdict] in md
+    assert json.loads((tmp_path / "out" / "review.json").read_text())["verdict"] == verdict
+
+
+def test_failed_suggestion_still_writes_the_review(buggy_repo, tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "MAX_FIX_ITERS", 1)
+    opt_in_suggest_fix(buggy_repo)
+    rv = run(buggy_repo, tmp_path, make_patch(buggy_repo, NO_FIX), FakeLLM(**script(fix=[reply("can't fix it")])))
+
+    assert rv["verdict"] == "doesnt_fix"
+    assert rv["suggested_fix"] == {"status": "failed", "reason": "max_iterations"}
+    assert not (tmp_path / "out" / "suggested_fix.diff").exists()
+    md = (tmp_path / "out" / "review.md").read_text()
+    assert review.LABELS["doesnt_fix"] in md and "Suggested fix" not in md
+
+
+def test_no_suggestion_unless_policy_opts_in_or_the_verdict_qualifies(buggy_repo, tmp_path):
+    llm = FakeLLM(**script())  # no "fix" phase scripted: a FIX call would raise KeyError
+    rv = run(buggy_repo, tmp_path, make_patch(buggy_repo, NO_FIX), llm)
+    assert rv["verdict"] == "doesnt_fix" and "suggested_fix" not in rv
+    opt_in_suggest_fix(buggy_repo)
+    rv = run(buggy_repo, tmp_path, make_patch(buggy_repo, GOOD), FakeLLM(**script()))
+    assert rv["verdict"] == "proven" and "suggested_fix" not in rv
 
 
 def test_breaks_tests_names_the_test(buggy_repo, tmp_path):

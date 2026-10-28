@@ -30,5 +30,6 @@ MAX_FIX_ITERS = 8
 MAX_ESCALATIONS = 2
 MAX_USD = 1.00
 MAX_SECONDS = 600
+SUGGEST_SECONDS = 300  # suggest-fix's own window after the review; review + suggestion stay under the 20 min job
 
 TOOL_OUTPUT_LINES = 200
