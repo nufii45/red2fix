@@ -1,0 +1,51 @@
+{
+  "verdict": "doesnt_fix",
+  "verdict_reason": "the repro test still fails with the PR applied",
+  "claim": "Parsing minute\u2011based durations results in incorrect timeout values.",
+  "summary": "The fix only multiplies minutes by 60 when hours is zero, but the spec requires minutes to be converted to seconds in all cases (e.g., \"1h30m\" should be 5400, not 3630). The root cause is that minutes are never multiplied by 60 when hours are present.",
+  "base_sha": "c0942f3b50fb80d3307c873a07bea465aeb43e33",
+  "head_sha": null,
+  "policy_sha": "61f329de0b357bea8de22cd38827212993e4631c21896688e63e9617eb8e1e4a",
+  "require_proof": true,
+  "spec_source": "spec_file",
+  "proof": {
+    "repro_test": "tests/test_repro_pr_1.py",
+    "base": "failed: 3 failed in 0.01s",
+    "head": "failed (exit 1): 1 failed, 2 passed in 0.01s",
+    "result": "doesnt_fix"
+  },
+  "suite": {
+    "new_failures": []
+  },
+  "findings": [
+    {
+      "rule": "Fixes the root cause described in the spec, not just the symptom",
+      "severity": "blocker",
+      "file": "minikit/duration.py",
+      "line": 10,
+      "quote": "+    if not hours:\n+        minutes *= 60  # \"5m\" means five minutes",
+      "note": "This only fixes the minutes-only case. For \"1h30m\", hours=1 so minutes stays 30, returning 3630 instead of 5400. Minutes must always be multiplied by 60.",
+      "diff_file": "minikit/duration.py"
+    },
+    {
+      "rule": "Handles the edge cases the spec mentions",
+      "severity": "blocker",
+      "file": "minikit/duration.py",
+      "line": 12,
+      "quote": "     return hours * 3600 + minutes + seconds",
+      "note": "With the current fix, \"1h30m\" still returns 3630 (1*3600 + 30) instead of the expected 5400 (1*3600 + 30*60). The spec explicitly mentions this case.",
+      "diff_file": "minikit/duration.py"
+    }
+  ],
+  "dropped_findings": [],
+  "restricted_paths_touched": [],
+  "web_search": true,
+  "web_searches": [],
+  "cost_usd": 0.01885,
+  "seconds": 18.5,
+  "calls": {
+    "ultra": 7,
+    "super": 0,
+    "nano": 1
+  }
+}

@@ -1,0 +1,329 @@
+{
+ "run": "rv-full",
+ "commit": "0c32486",
+ "reviews": 40,
+ "original": {
+  "false_approvals": [
+   "psf__requests-1963",
+   "psf__requests-2317"
+  ],
+  "failed_total": 20
+ },
+ "cleaned": {
+  "false_approvals": [],
+  "failed_total": 16
+ },
+ "gold": {
+  "approvals": 3,
+  "total": 20
+ },
+ "verdicts": {
+  "gold": {
+   "doesnt_fix": 5,
+   "unproven": 8,
+   "breaks_tests": 1,
+   "error": 3,
+   "proven": 3
+  },
+  "failed": {
+   "error": 6,
+   "doesnt_fix": 3,
+   "unproven": 7,
+   "breaks_tests": 2,
+   "proven": 2
+  }
+ },
+ "settings_identical": true,
+ "unproven": 12,
+ "errors": 9,
+ "median_usd": 0.4639,
+ "median_s": 198.2,
+ "total_usd": 19.49,
+ "calls": {
+  "ultra": 1565,
+  "super": 0,
+  "nano": 40
+ },
+ "instances": [
+  {
+   "id": "astropy__astropy-12907",
+   "failed": {
+    "verdict": "error",
+    "cost_usd": 0.3538,
+    "seconds": 134.6,
+    "truly_failed": true
+   },
+   "gold": {
+    "verdict": "doesnt_fix",
+    "cost_usd": 0.5074,
+    "seconds": 189.7
+   }
+  },
+  {
+   "id": "astropy__astropy-14182",
+   "failed": {
+    "verdict": "doesnt_fix",
+    "cost_usd": 0.2341,
+    "seconds": 112.6,
+    "truly_failed": true
+   },
+   "gold": {
+    "verdict": "unproven",
+    "cost_usd": 0.5544,
+    "seconds": 220.6
+   }
+  },
+  {
+   "id": "astropy__astropy-14365",
+   "failed": {
+    "verdict": "unproven",
+    "cost_usd": 0.2532,
+    "seconds": 152.1,
+    "truly_failed": true
+   },
+   "gold": {
+    "verdict": "doesnt_fix",
+    "cost_usd": 0.2015,
+    "seconds": 131.1
+   }
+  },
+  {
+   "id": "astropy__astropy-14995",
+   "failed": {
+    "verdict": "unproven",
+    "cost_usd": 0.3457,
+    "seconds": 151.2,
+    "truly_failed": true
+   },
+   "gold": {
+    "verdict": "unproven",
+    "cost_usd": 0.2945,
+    "seconds": 174.1
+   }
+  },
+  {
+   "id": "astropy__astropy-6938",
+   "failed": {
+    "verdict": "error",
+    "cost_usd": 1.0174,
+    "seconds": 222.6,
+    "truly_failed": true
+   },
+   "gold": {
+    "verdict": "breaks_tests",
+    "cost_usd": 0.873,
+    "seconds": 256.5
+   }
+  },
+  {
+   "id": "mwaskom__seaborn-2848",
+   "failed": {
+    "verdict": "unproven",
+    "cost_usd": 0.7457,
+    "seconds": 438.0,
+    "truly_failed": true
+   },
+   "gold": {
+    "verdict": "doesnt_fix",
+    "cost_usd": 0.2464,
+    "seconds": 342.3
+   }
+  },
+  {
+   "id": "mwaskom__seaborn-3010",
+   "failed": {
+    "verdict": "unproven",
+    "cost_usd": 0.4483,
+    "seconds": 208.6,
+    "truly_failed": true
+   },
+   "gold": {
+    "verdict": "unproven",
+    "cost_usd": 0.2376,
+    "seconds": 170.6
+   }
+  },
+  {
+   "id": "mwaskom__seaborn-3190",
+   "failed": {
+    "verdict": "error",
+    "cost_usd": 0.5787,
+    "seconds": 208.2,
+    "truly_failed": true
+   },
+   "gold": {
+    "verdict": "unproven",
+    "cost_usd": 0.313,
+    "seconds": 195.2
+   }
+  },
+  {
+   "id": "mwaskom__seaborn-3407",
+   "failed": {
+    "verdict": "error",
+    "cost_usd": 0.9077,
+    "seconds": 853.3,
+    "truly_failed": true
+   },
+   "gold": {
+    "verdict": "error",
+    "cost_usd": 0.6141,
+    "seconds": 887.8
+   }
+  },
+  {
+   "id": "pallets__flask-4045",
+   "failed": {
+    "verdict": "doesnt_fix",
+    "cost_usd": 0.2232,
+    "seconds": 185.6,
+    "truly_failed": true
+   },
+   "gold": {
+    "verdict": "doesnt_fix",
+    "cost_usd": 0.2108,
+    "seconds": 177.7
+   }
+  },
+  {
+   "id": "pallets__flask-4992",
+   "failed": {
+    "verdict": "doesnt_fix",
+    "cost_usd": 0.2985,
+    "seconds": 104.8,
+    "truly_failed": true
+   },
+   "gold": {
+    "verdict": "proven",
+    "cost_usd": 0.2214,
+    "seconds": 106.8
+   }
+  },
+  {
+   "id": "pallets__flask-5063",
+   "failed": {
+    "verdict": "breaks_tests",
+    "cost_usd": 0.7357,
+    "seconds": 156.0,
+    "truly_failed": true
+   },
+   "gold": {
+    "verdict": "unproven",
+    "cost_usd": 0.0201,
+    "seconds": 37.6
+   }
+  },
+  {
+   "id": "psf__requests-1963",
+   "failed": {
+    "verdict": "proven",
+    "cost_usd": 0.6513,
+    "seconds": 226.8,
+    "truly_failed": false
+   },
+   "gold": {
+    "verdict": "proven",
+    "cost_usd": 0.4795,
+    "seconds": 201.2
+   }
+  },
+  {
+   "id": "psf__requests-2148",
+   "failed": {
+    "verdict": "unproven",
+    "cost_usd": 0.7519,
+    "seconds": 324.1,
+    "truly_failed": true
+   },
+   "gold": {
+    "verdict": "unproven",
+    "cost_usd": 0.6677,
+    "seconds": 334.0
+   }
+  },
+  {
+   "id": "psf__requests-2317",
+   "failed": {
+    "verdict": "proven",
+    "cost_usd": 0.252,
+    "seconds": 214.7,
+    "truly_failed": false
+   },
+   "gold": {
+    "verdict": "proven",
+    "cost_usd": 0.2662,
+    "seconds": 241.8
+   }
+  },
+  {
+   "id": "psf__requests-2674",
+   "failed": {
+    "verdict": "unproven",
+    "cost_usd": 0.0076,
+    "seconds": 178.3,
+    "truly_failed": false
+   },
+   "gold": {
+    "verdict": "doesnt_fix",
+    "cost_usd": 0.5419,
+    "seconds": 288.0
+   }
+  },
+  {
+   "id": "pydata__xarray-4094",
+   "failed": {
+    "verdict": "error",
+    "cost_usd": 0.5693,
+    "seconds": 187.8,
+    "truly_failed": true
+   },
+   "gold": {
+    "verdict": "error",
+    "cost_usd": 0.5367,
+    "seconds": 137.5
+   }
+  },
+  {
+   "id": "pylint-dev__pylint-7080",
+   "failed": {
+    "verdict": "error",
+    "cost_usd": 1.0061,
+    "seconds": 311.1,
+    "truly_failed": true
+   },
+   "gold": {
+    "verdict": "error",
+    "cost_usd": 1.0079,
+    "seconds": 284.5
+   }
+  },
+  {
+   "id": "pytest-dev__pytest-7432",
+   "failed": {
+    "verdict": "breaks_tests",
+    "cost_usd": 0.3936,
+    "seconds": 183.5,
+    "truly_failed": false
+   },
+   "gold": {
+    "verdict": "unproven",
+    "cost_usd": 0.1619,
+    "seconds": 88.2
+   }
+  },
+  {
+   "id": "pytest-dev__pytest-7490",
+   "failed": {
+    "verdict": "unproven",
+    "cost_usd": 0.8325,
+    "seconds": 254.4,
+    "truly_failed": true
+   },
+   "gold": {
+    "verdict": "unproven",
+    "cost_usd": 0.9272,
+    "seconds": 291.5
+   }
+  }
+ ]
+}

@@ -1,0 +1,8 @@
+{"ts": 1793200511.6056862, "phase": "triage_review", "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B", "in_tokens": 210, "out_tokens": 241, "latency_ms": 2718, "cost_usd": 7e-05}
+{"ts": 1793200513.2474673, "phase": "localize", "model": "nvidia/Nemotron-3-Ultra-550b-a55b", "in_tokens": 943, "out_tokens": 88, "latency_ms": 1124, "cost_usd": 0.001207}
+{"ts": 1793200514.8861935, "phase": "localize", "model": "nvidia/Nemotron-3-Ultra-550b-a55b", "in_tokens": 1139, "out_tokens": 287, "latency_ms": 1636, "cost_usd": 0.002}
+{"ts": 1793200517.461705, "phase": "localize", "model": "nvidia/Nemotron-3-Ultra-550b-a55b", "in_tokens": 1481, "out_tokens": 722, "latency_ms": 2572, "cost_usd": 0.003647}
+{"ts": 1793200518.5192645, "phase": "reproduce", "model": "nvidia/Nemotron-3-Ultra-550b-a55b", "in_tokens": 1581, "out_tokens": 180, "latency_ms": 1052, "cost_usd": 0.002121}
+{"ts": 1793200520.036328, "phase": "reproduce", "model": "nvidia/Nemotron-3-Ultra-550b-a55b", "in_tokens": 1943, "out_tokens": 342, "latency_ms": 1514, "cost_usd": 0.002969}
+{"ts": 1793200522.4977615, "phase": "verify_red", "model": "nvidia/Nemotron-3-Ultra-550b-a55b", "in_tokens": 949, "out_tokens": 562, "latency_ms": 1980, "cost_usd": 0.002635}
+{"ts": 1793200527.068591, "phase": "review", "model": "nvidia/Nemotron-3-Ultra-550b-a55b", "in_tokens": 700, "out_tokens": 1167, "latency_ms": 3610, "cost_usd": 0.004201}

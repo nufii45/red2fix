@@ -1,0 +1,12 @@
+{"t": 1793200508.886371, "ev": "phase", "name": "TRIAGE", "iteration": 0}
+{"t": 1793200511.6073472, "ev": "phase", "name": "BASELINE", "iteration": 0}
+{"t": 1793200512.122372, "ev": "phase", "name": "LOCALIZE", "iteration": 0}
+{"t": 1793200517.4661672, "ev": "phase", "name": "REPRODUCE", "iteration": 0}
+{"t": 1793200520.039158, "ev": "phase", "name": "VERIFY_RED", "iteration": 0}
+{"t": 1793200522.5008862, "ev": "phase", "name": "COMMIT_REPRO", "iteration": 0}
+{"t": 1793200522.5095177, "ev": "phase", "name": "APPLY_PR", "iteration": 0}
+{"t": 1793200522.5174425, "ev": "phase", "name": "HEAD_CHECK", "iteration": 0}
+{"t": 1793200523.4575849, "ev": "phase", "name": "REVIEW", "iteration": 0}
+{"t": 1793200527.0710304, "ev": "phase", "name": "VERDICT", "iteration": 0}
+{"t": 1793200527.0720046, "ev": "phase", "name": "DONE", "iteration": 0}
+{"t": 1793200527.077579, "ev": "end", "status": "succeeded", "abort_reason": null, "verdict": "doesnt_fix"}
