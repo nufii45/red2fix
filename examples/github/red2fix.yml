@@ -72,7 +72,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install the reviewer
-        run: pip install openai==3.35.1 langsmith==0.14.14 pytest==9.1.1
+        run: pip install openai==3.35.1 pytest==9.1.1 langsmith==0.14.14
 
       # The only step with the Nebius key, and it has no GitHub token. A verdict never fails this step;
       # gh_status.py turns a missing review.json into `error`. The Tavily and LangSmith keys sit here under the
@@ -82,8 +82,8 @@ jobs:
         env:
           NEBIUS_API_KEY: ${{ secrets.NEBIUS_API_KEY }}
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}  # used only with web_search = true in .red2fix.toml
-          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
-          LANGSMITH_TRACING: ${{ secrets.LANGSMITH_API_KEY != '' }}
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}  # optional; empty turns tracing off
+          LANGSMITH_TRACE_URL_BASE: ${{ vars.LANGSMITH_TRACE_URL_BASE }}  # project URL from the LangSmith UI, for trace_url
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
           python -m agent.review --repo ../pr --spec ../spec.md --patch ../pr.patch --out ../out \

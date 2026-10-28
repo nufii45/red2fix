@@ -11,7 +11,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-from langsmith import traceable
+from agent import tracing
 
 URL = "https://api.tavily.com/search"
 # Code hosts and Q&A sites are where a known bug's real fix is posted.
@@ -80,7 +80,7 @@ class Search:
         self.used = self.reserved = 0  # reserved: searches kept for the dependency check, which runs last
         self.log = []
 
-    @traceable(run_type="tool", name="search_docs")
+    @tracing.traceable(run_type="tool", name="search_docs")
     def query(self, phase, q, model=True, include=None):
         """(formatted results for the model or why there are none, the raw results). `include` restricts the
         search to those domains instead of excluding the default list."""

@@ -227,7 +227,7 @@ Needs [uv](https://docs.astral.sh/uv/), Docker and a Token Factory key.
 git clone https://github.com/nufii45/red2fix && cd red2fix
 uv sync
 echo 'NEBIUS_API_KEY=your-key' > .env
-# Optional: TAVILY_API_KEY=... (web search; demo/repo's policy turns it on), LANGSMITH_API_KEY=... and LANGSMITH_TRACING=true
+# Optional: TAVILY_API_KEY=... (web search; demo/repo's policy turns it on), LANGSMITH_API_KEY=... (tracing)
 uv run pytest -q
 ```
 

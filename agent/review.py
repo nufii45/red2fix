@@ -15,13 +15,11 @@ import traceback
 from collections import Counter
 from pathlib import Path
 
-from langsmith import traceable
-
 import config
-from agent import guards, pr_context, prompts, search, tools
+from agent import guards, pr_context, prompts, search, tools, tracing
 from agent import policy as policies
 from agent.llm import LLM, BudgetExceeded
-from agent.main import ARTIFACTS, Abort, Run, check, fix, git, localize, parse_json, prepare, reproduce
+from agent.main import ARTIFACTS, Abort, Run, check, fix, git, localize, parse_json, prepare, reproduce, trace_target
 
 SEVERITIES = ("blocker", "warning", "info")
 LABELS = {
@@ -323,7 +321,7 @@ def render_md(rv, out):
     return "\n".join(lines) + "\n"
 
 
-@traceable(name="red2fix-review")
+@tracing.traceable(name="review", process_inputs=tracing.root_inputs)
 def run_review(repo, spec_path, patch_path, out, number, work, llm=None, max_seconds=config.MAX_SECONDS,
                spec_source="spec_file", head_sha=None, suite=(), repro_steps=12, web_search=True):
     """web_search=False turns search off whatever the policy says (the bench: the real fix is often online)."""
@@ -446,6 +444,10 @@ def run_review(repo, spec_path, patch_path, out, number, work, llm=None, max_sec
             status="succeeded" if ok else "aborted", abort_reason=None if ok else rv["verdict_reason"],
             verdict=rv["verdict"], cost_usd=rv["cost_usd"], seconds=rv["seconds"],
         )
+        url = tracing.finish(mode="review", **trace_target(repo, number), head_sha=rv["head_sha"],
+                             policy_sha=rv["policy_sha"], verdict=rv["verdict"], cost_usd=rv["cost_usd"])
+        if url:
+            rv["trace_url"] = run.result["trace_url"] = url
         run.save("review.json", json.dumps(rv, indent=2))
         run.save("result.json", json.dumps(run.result, indent=2))
         run.save("review.md", render_md(rv, out))

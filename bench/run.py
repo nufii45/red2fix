@@ -53,7 +53,7 @@ def run_one(inst, out_root, max_seconds):
         if not tag:
             return iid, aborted(out, "error: image build failed (see run.log)")
         subprocess.run(
-            ["docker", "run", "--rm", "--platform", "linux/amd64", "--env-file", str(ROOT / ".env"),
+            ["docker", "run", "--rm", "--platform", "linux/amd64", "--env-file", str(ROOT / ".env"), "-e", f"RED2FIX_INSTANCE={iid}",
              "-v", f"{out}:/out", tag, "--issue", "/out/issue.md", "--out", "/out", "--number", number,
              "--max-seconds", str(max_seconds), "--suite", *inst["test_files"]],
             stdout=log, stderr=subprocess.STDOUT,
@@ -78,7 +78,7 @@ def review_one(inst, kind, patch, out_root, max_seconds):
         if not tag:
             return iid, kind, aborted(out, "error: image build failed (see run.log)")
         subprocess.run(
-            ["docker", "run", "--rm", "--platform", "linux/amd64", "--env-file", str(ROOT / ".env"),
+            ["docker", "run", "--rm", "--platform", "linux/amd64", "--env-file", str(ROOT / ".env"), "-e", f"RED2FIX_INSTANCE={iid}",
              "-v", f"{out}:/out", "--entrypoint", "/opt/r2f/bin/python", tag,
              "-m", "agent.review", "--repo", "/testbed", "--work", "/testbed",
              "--spec", "/out/spec.md", "--patch", "/out/pr.patch", "--out", "/out", "--number", number_of(iid),

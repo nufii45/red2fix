@@ -1,6 +1,11 @@
+import os
 import subprocess
 
 import pytest
+
+# Tests never trace for real; agent.tracing reads this at import, after conftest.
+for _k in [k for k in os.environ if k.startswith("LANGSMITH_")]:
+    del os.environ[_k]
 
 
 @pytest.fixture

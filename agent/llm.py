@@ -3,7 +3,7 @@ import os
 import time
 
 import config
-from langsmith import traceable
+from agent import tracing
 
 
 class BudgetExceeded(Exception):
@@ -15,17 +15,18 @@ class LLM:
 
     def __init__(self, ledger_path, max_usd=config.MAX_USD, client=None):
         if client is None:
-            from langsmith.wrappers import wrap_openai
             from openai import OpenAI
 
-            # Traced only when LANGSMITH_TRACING=true and LANGSMITH_API_KEY are set; otherwise a pass-through.
-            client = wrap_openai(OpenAI(base_url=config.BASE_URL, api_key=os.environ["NEBIUS_API_KEY"]))
+            client = OpenAI(base_url=config.BASE_URL, api_key=os.environ["NEBIUS_API_KEY"])
+            if tracing.ENABLED:
+                from langsmith.wrappers import wrap_openai
+
+                client = wrap_openai(client)
         self.client = client
         self.ledger_path = ledger_path
         self.max_usd = max_usd
         self.spent = 0.0
 
-    @traceable(name="chat")  # the phase shows up in the trace's inputs
     def chat(self, phase, messages, model_key=None, **kw):
         key = model_key or config.ROUTES[phase]
         model = config.MODELS[key]

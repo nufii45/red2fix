@@ -111,7 +111,8 @@ def verdict_card(run):
     )
     calls = rv.get("calls") or {}
     mix = " / ".join(f"{k} {n}" for k, n in calls.items() if n) or "no model calls"
-    links = [(label, rv[key]) for key, label in (("pr_url", "pull request ↗"), ("run_url", "workflow run ↗"))
+    links = [(label, rv[key]) for key, label in (("pr_url", "pull request ↗"), ("run_url", "workflow run ↗"),
+                                                      ("trace_url", "View trace in LangSmith ↗"))
              if str(rv.get(key) or "").startswith("https://")]
     return (
         '<div class="r2f-card r2f-in"><div class="head"><span class="name">'
