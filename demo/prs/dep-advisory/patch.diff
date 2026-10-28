@@ -8,6 +8,22 @@ index 2295f52..990d06c 100644
      hours, minutes, seconds = (int(g) if g else 0 for g in match.groups())
 -    return hours * 3600 + minutes + seconds
 +    return hours * 3600 + minutes * 60 + seconds
+diff --git a/minikit/notify.py b/minikit/notify.py
+new file mode 100644
+index 0000000..9b993fb
+--- /dev/null
++++ b/minikit/notify.py
+@@ -0,0 +1,10 @@
++import requests
++
++from minikit.duration import parse_duration
++
++
++def notify_timeout(url, text):
++    """Post a job's timeout, in seconds, to the deploy webhook at url."""
++    response = requests.post(url, json={"timeout_seconds": parse_duration(text)}, timeout=10)
++    response.raise_for_status()
++    return response
 diff --git a/requirements.txt b/requirements.txt
 new file mode 100644
 index 0000000..46c4b13

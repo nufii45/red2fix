@@ -169,26 +169,28 @@ excluded.
 Every query, its phase and the result URLs go into `review.json` (`web_searches`), a "Searches" block in
 `review.md`, the dashboard and LangSmith traces.
 
-**Before/after on `demo/prs/dep-advisory`** (the `good` duration fix plus `requirements.txt` pinning
-`requests==2.19.1`, which is affected by CVE-2018-18074, fixed in 2.20.0). One local run each:
+**Before/after on `demo/prs/dep-advisory`.** The spec asks for the `parse_duration` minutes fix plus
+`minikit.notify.notify_timeout(url, text)`, which posts the timeout to a webhook with `requests`, pinned in
+`requirements.txt`. The PR does both, pinning `requests==2.19.1`, which is affected by CVE-2018-18074 /
+GHSA-x84v-xcm2-53pg (fixed in 2.20.0). Because the spec explains the pin, the only problem left is the
+version. One local run each:
 
-| | Verdict | Cost | What the reviewer said about the pin |
+| | Verdict | Cost | Blockers |
 |---|---|---|---|
-| Search off | ✅ Proven | $0.02, 15 s | "unrelated to the spec", a warning |
-| Search on, open web | 🔶 Needs review | $0.03, 31 s | blocker: known advisories, citing a VersionEye page for requests **2.16.0** |
-| Search on, advisory domains + check | 🔶 Needs review | $0.02, 28 s | blocker: known advisories, citing https://security.snyk.io/package/pip/requests/2.19.1 |
+| Search off | ✅ Proven | $0.04, 54 s | none: the reviewer raised nothing about the pin |
+| Search on | 🔶 Needs review | $0.07, 74 s | "No dependencies with known advisories", citing https://osv.dev/vulnerability/GHSA-x84v-xcm2-53pg |
 
 What this does and doesn't show:
-- On the open web, the first search-on run cited a page about another version. That's why advisory searches
-  are now limited to vulnerability databases and the package index, and why the cited result must name the
-  package and the exact version or an advisory id. The rerun cited Snyk's page for requests 2.19.1 (the
-  redirect auth-header leak, upgrade to 2.20).
-- One run each, so the verdicts vary from run to run. In the last run the reviewer also rated the
-  `requirements.txt` file a blocker as unrelated to the spec, where the search-off run called it a warning,
-  so search wasn't the only blocker there. In both search-on runs the model gave the advisory blocker
-  severity on its own. The code rule that raises sourced advisories to blocker is there for runs where the
-  model says "warning".
-- **The expected-behaviour use hasn't helped yet.** In the dep-advisory run, LOCALIZE spent one search on
+- Without search, Red2Fix approves a PR that pins a version with a published high-severity advisory. With
+  search, the advisory is the only blocker.
+- This took two fixes. An earlier version of the demo didn't explain the pin. There, the reviewer flagged
+  `requirements.txt` as unrelated to the spec, and on one run as a blocker, so search wasn't the only
+  blocker. On the open web, a search-on run also cited a page about requests 2.16.0. Since then, advisory
+  searches go only to osv.dev, nvd.nist.gov, cve.org, pypi.org, security.snyk.io and advisories.gitlab.com,
+  and the cited result must name the package and the exact version or an advisory id.
+- One run each, so verdicts may differ between runs. The model gave the advisory blocker severity on its
+  own. The code rule that raises sourced advisories to blocker is there for runs where it says "warning".
+- **The expected-behaviour use hasn't helped yet.** In the first dep-advisory run, LOCALIZE spent one search on
   Python `re` docs, which changed nothing. On `demo/prs/wrong` with search on there were zero searches (still
   ❌ Doesn't fix). REPRODUCE never searched in either run. On the bench it's off, so its effect on the 5
   wrong-expected-value cases is unmeasured. Reading those cases, docs could plausibly have helped one or two
