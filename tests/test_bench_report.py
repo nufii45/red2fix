@@ -29,7 +29,7 @@ def test_report_counts_under_both_settings(tmp_path):
     write(tmp_path, "b__b-2", "failed", rv("needs_review", findings=[SNEAKY]))
     write(tmp_path, "c__c-3", "gold", None)  # crashed: no review.json
 
-    s = report_review.report(tmp_path)
+    s = report_review.report(tmp_path, tmp_path / "no-labels.json")
 
     blocker, warning = s["settings"]["blocker"], s["settings"]["warning"]
     assert (blocker["false_approvals"], blocker["failed_total"]) == ([], 2)
@@ -46,3 +46,29 @@ def test_report_counts_under_both_settings(tmp_path):
 def test_errors_are_not_recomputed():
     assert report_review.recompute(rv("error", proof=None), "warning") == "error"
     assert report_review.recompute(None, "blocker") == "missing"
+
+
+SAME_FAILURE = "_____ test_r _____\n>   assert f() == 1\ntests/t.py:3: AssertionError\nFAILED tests/t.py::test_r - assert 0 == 1\n"
+
+
+def test_recomputed_verdicts_and_cleaned_labels(tmp_path):
+    # Failed with the same failure on base and head: stored doesnt_fix, recomputed unproven.
+    write(tmp_path, "a__a-1", "failed", rv("doesnt_fix", proof="doesnt_fix"))
+    for log in ("red.log", "head.log"):
+        (tmp_path / "a__a-1" / "failed" / log).write_text(SAME_FAILURE)
+    write(tmp_path, "b__b-2", "failed", rv("proven"))  # officially unresolved only through PASS_TO_PASS
+    write(tmp_path, "c__c-3", "failed", rv("proven"))  # a FAIL_TO_PASS test failed: a real false approval
+    labels = tmp_path / "labels.json"
+    labels.write_text(json.dumps({"a__a-1": ["t::x"], "b__b-2": [], "c__c-3": ["t::y"]}))
+
+    s = report_review.report(tmp_path, labels)
+
+    assert s["instances"]["a__a-1"]["failed"]["verdict"] == "doesnt_fix"
+    assert s["instances"]["a__a-1"]["failed"]["recomputed"] == "unproven"
+    blocker = s["settings"]["blocker"]
+    assert (blocker["false_approvals"], blocker["failed_total"]) == (["b__b-2", "c__c-3"], 3)
+    assert (blocker["false_approvals_cleaned"], blocker["failed_total_cleaned"]) == (["c__c-3"], 2)
+    assert s["stored"] == {"false_approvals": ["b__b-2", "c__c-3"], "false_approvals_cleaned": ["c__c-3"]}
+    md = (tmp_path / "review_report.md").read_text()
+    assert "False approvals, cleaned labels: 1 / 2 (c__c-3)" in md
+    assert "doesnt_fix → **unproven**" in md and "defined after inspecting these results" in md

@@ -7,6 +7,7 @@ The tree stays at base until APPLY_PR, so LOCALIZE and REPRODUCE only ever see t
 
 import argparse
 import json
+import re
 import shutil
 import time
 import traceback
@@ -26,6 +27,9 @@ LABELS = {
 }
 TEST_RULE = "No weakened, skipped, xfailed or deleted tests"
 UNRELATED_RULE = "No changes unrelated to the spec"
+SECTION = re.compile(r"^_+ (.*\S) _+$")  # "____ test_x ____"; long names get a single "_" each side
+LOCATION = re.compile(r"^\S+?\.py:\d+:")  # "path:line: in func" per frame, "path:line: Exc" on the last
+ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 
 def severity(finding, policy):
@@ -44,10 +48,34 @@ def severity(finding, policy):
     return finding.get("severity")
 
 
+def failure_signature(out):
+    """(failed test ids, per failure section: its name, every traceback location and every executing source
+    line, the ones pytest marks with ">") from pytest output."""
+    failed, sections = set(), []
+    for line in ANSI.sub("", out).splitlines():
+        if line.startswith(("FAILED ", "ERROR ")):
+            failed.add(line.split(" - ")[0])
+        elif (m := SECTION.match(line)) and m.group(1).strip("_ "):
+            sections.append([m.group(1)])
+        elif sections and (LOCATION.match(line) or line.startswith(">")):
+            sections[-1].append(line.rstrip())
+    return failed, sections
+
+
+def same_failure(base_out, head_out):
+    """True when head fails the same tests through the same traceback frames, executing the same source
+    lines, with the same exceptions as base. An edit to code the test runs through changes a frame's line
+    number or its source line, so this only holds when the test never ran through changed code.
+    """
+    base = failure_signature(base_out)
+    return bool(base[0]) and base == failure_signature(head_out)
+
+
 def decide(proof, new_failures, findings, restricted_touched, policy, spec_source="spec_file"):
     """(verdict, reason). Proof and regression come from pytest; findings can only lower the verdict.
 
-    proof: "proven" (red on base, green on head), "doesnt_fix", "unproven" or "error".
+    proof: "proven" (red on base, green on head), "doesnt_fix", "unreached" (head failed exactly as base
+    did), "unproven" or "error".
     """
     timeouts = sorted(f for f in new_failures if f.startswith("<"))
     if proof == "error" or timeouts:
@@ -56,6 +84,8 @@ def decide(proof, new_failures, findings, restricted_touched, policy, spec_sourc
         return "breaks_tests", "new failing tests: " + ", ".join(sorted(new_failures))
     if proof == "doesnt_fix":
         return "doesnt_fix", "the repro test still fails with the PR applied"
+    if proof == "unreached":
+        return "unproven", "the repro test fails the same way on base and head: the test never reached the changed code"
     if proof == "unproven" and policy["require_proof"]:
         return "unproven", "no test showed the claimed behaviour failing on base"
     blockers = [f for f in findings if severity(f, policy) == "blocker"]
@@ -264,7 +294,7 @@ def run_review(repo, spec_path, patch_path, out, number, work, llm=None, max_sec
         if proof == "red":
             code, head_out = tools.run_tests(work, run.repro)
             run.save("head.log", head_out)
-            proof = "proven" if code == 0 else "doesnt_fix"
+            proof = "proven" if code == 0 else "unreached" if same_failure(red, head_out) else "doesnt_fix"
             rv["proof"]["head"] = f"{'passed' if code == 0 else f'failed (exit {code})'}: {last_line(head_out)}"
         # The repro is judged above; inside the suite a wrong fix would show up as breaks_tests instead.
         head = tools.failing_tests(work, *suite, f"--ignore={run.repro}")

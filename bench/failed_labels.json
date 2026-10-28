@@ -1,0 +1,61 @@
+{
+  "astropy__astropy-14995": [
+    "astropy/nddata/mixins/tests/test_ndarithmetic.py::test_nddata_bitmask_arithmetic"
+  ],
+  "psf__requests-2317": [],
+  "pydata__xarray-4094": [
+    "xarray/tests/test_dataset.py::TestDataset::test_to_stacked_array_to_unstacked_dataset"
+  ],
+  "pytest-dev__pytest-7432": [],
+  "astropy__astropy-12907": [
+    "astropy/modeling/tests/test_separable.py::test_separable[compound_model6-result6]",
+    "astropy/modeling/tests/test_separable.py::test_separable[compound_model9-result9]"
+  ],
+  "astropy__astropy-14182": [
+    "astropy/io/ascii/tests/test_rst.py::test_rst_with_header_rows"
+  ],
+  "astropy__astropy-14365": [
+    "astropy/io/ascii/tests/test_qdp.py::test_roundtrip[True]"
+  ],
+  "pylint-dev__pylint-7080": [
+    "tests/test_self.py::TestRunTC::test_ignore_path_recursive_current_dir"
+  ],
+  "pytest-dev__pytest-7490": [
+    "testing/test_skipping.py::TestXFail::test_dynamic_xfail_set_during_runtest_failed",
+    "testing/test_skipping.py::TestXFail::test_dynamic_xfail_set_during_runtest_passed_strict"
+  ],
+  "astropy__astropy-6938": [
+    "astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_ascii_table_data",
+    "astropy/io/fits/tests/test_table.py::TestTableFunctions::test_ascii_table"
+  ],
+  "mwaskom__seaborn-2848": [
+    "tests/test_relational.py::TestScatterPlotter::test_hue_order"
+  ],
+  "mwaskom__seaborn-3010": [
+    "tests/_stats/test_regression.py::TestPolyFit::test_missing_data"
+  ],
+  "mwaskom__seaborn-3190": [
+    "tests/_core/test_scales.py::TestContinuous::test_interval_with_bools"
+  ],
+  "mwaskom__seaborn-3407": [
+    "tests/test_axisgrid.py::TestPairGrid::test_pairplot_column_multiindex"
+  ],
+  "pallets__flask-4045": [
+    "tests/test_blueprints.py::test_route_decorator_custom_endpoint_with_dots"
+  ],
+  "pallets__flask-4992": [
+    "tests/test_config.py::test_config_from_file_toml"
+  ],
+  "pallets__flask-5063": [
+    "tests/test_cli.py::TestRoutes::test_host",
+    "tests/test_cli.py::TestRoutes::test_subdomain"
+  ],
+  "psf__requests-1963": [],
+  "psf__requests-2148": [
+    "test_requests.py::RequestsTestCase::test_auth_is_stripped_on_redirect_off_host",
+    "test_requests.py::RequestsTestCase::test_generic_cookiejar_works",
+    "test_requests.py::RequestsTestCase::test_iter_content_handles_socket_error",
+    "test_requests.py::RequestsTestCase::test_unicode_multipart_post"
+  ],
+  "psf__requests-2674": []
+}

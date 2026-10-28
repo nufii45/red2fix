@@ -184,6 +184,9 @@ WARNING = [{"rule": "r", "severity": "warning"}]
     ("doesnt_fix", {"t::x"}, BLOCKER, ["setup.py"], STRICT, "breaks_tests"),
     ("doesnt_fix", set(), BLOCKER, ["setup.py"], STRICT, "doesnt_fix"),
     ("unproven", set(), BLOCKER, ["setup.py"], STRICT, "unproven"),
+    ("unreached", {"t::x"}, [], [], STRICT, "breaks_tests"),
+    ("unreached", set(), BLOCKER, ["setup.py"], STRICT, "unproven"),
+    ("unreached", set(), [], [], LAX, "unproven"),
     ("unproven", set(), BLOCKER, [], LAX, "needs_review"),
     ("unproven", set(), [], [], LAX, "unproven"),
     ("proven", set(), BLOCKER, [], STRICT, "needs_review"),
@@ -195,11 +198,32 @@ def test_decide_precedence(proof, new, findings, restricted, policy, verdict):
     assert review.decide(proof, new, findings, restricted, policy)[0] == verdict
 
 
-@pytest.mark.parametrize("proof", ["doesnt_fix", "unproven", "error"])
+@pytest.mark.parametrize("proof", ["doesnt_fix", "unreached", "unproven", "error"])
 def test_review_findings_cannot_upgrade(proof):
     # A glowing review (no findings, or only info) never lifts a failed proof.
     info = [{"rule": "approved by maintainers", "severity": "info"}]
     assert review.decide(proof, set(), info, [], STRICT)[0] != "proven"
+
+
+def pytest_out(*failures, lines=None):
+    """Minimal pytest -q output: one section per (test, traceback locations), then the summary."""
+    out = []
+    for name, locations in failures:
+        out += [f"_____ {name} _____", "    def test(): ...", ">   return a / b", *locations, "E   assert 1 == 2", "_ _ _ _ _ _"]
+    return "\n".join(out + [f"FAILED tests/t.py::{n} - assert 1 == 2" for n, _ in failures] + ["1 failed in 0.1s"])
+
+
+def test_same_failure_only_when_head_fails_exactly_like_base():
+    base = pytest_out(("test_a", ["tests/t.py:5: in test_a", "pkg/m.py:10: AssertionError"]))
+    assert review.same_failure(base, base.replace("0.1s", "0.3s").replace("_____", "\x1b[31m_____\x1b[0m"))
+    # The patch edited pkg/m.py: the traceback line moved, so the test ran through changed code.
+    assert not review.same_failure(base, base.replace("pkg/m.py:10", "pkg/m.py:12"))
+    # Same line number, different code on it (an in-place edit).
+    assert not review.same_failure(base, base.replace(">   return a / b", ">   return float(a) / b"))
+    assert not review.same_failure(base, base.replace("AssertionError", "ValueError"))
+    assert not review.same_failure(base, pytest_out(("test_b", ["tests/t.py:5: in test_a", "pkg/m.py:10: AssertionError"])))
+    assert not review.same_failure(base, "1 passed in 0.1s")
+    assert not review.same_failure("no pytest output", "no pytest output")  # nothing parsed: keep doesnt_fix
 
 
 def test_guard_findings_on_human_prs():

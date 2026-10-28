@@ -1,6 +1,7 @@
 """Pick one officially unresolved patch per frozen instance from public SWE-bench Lite submissions.
 
 Usage: uv run bench/failed_patches.py [--systems 12]   writes bench/failed_patches.json
+       uv run bench/failed_patches.py --labels         writes bench/failed_labels.json
 
 SWE-bench/experiments holds entries, not artifacts: each Lite system has results/results.json (resolved
 ids) and metadata.yaml, whose `assets` point at s3://swe-bench-submissions/lite/<system>/logs. That
@@ -19,6 +20,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 INSTANCES = ROOT / "bench" / "instances.json"
 OUT = ROOT / "bench" / "failed_patches.json"
+LABELS = ROOT / "bench" / "failed_labels.json"
 LISTING = "https://api.github.com/repos/SWE-bench/experiments/contents/evaluation/lite"
 RAW = "https://raw.githubusercontent.com/SWE-bench/experiments/main/evaluation/lite"
 S3 = "https://swe-bench-submissions.s3.amazonaws.com"
@@ -64,10 +66,28 @@ def choose(iid, ranked, fetch_report, fetch_patch):
     return None
 
 
+def f2p_failures(report):
+    """The FAIL_TO_PASS tests an official report.json (one instance's entry) lists as failed."""
+    return sorted(report.get("tests_status", {}).get("FAIL_TO_PASS", {}).get("failure", []))
+
+
+def labels():
+    """{instance: failed FAIL_TO_PASS tests} for each chosen patch: the cleaned-label input of report_review."""
+    out = {}
+    for iid, pick in json.loads(OUT.read_text()).items():
+        # shortcut: assumes the S3 prefix is lite/<system>, true for all 20 chosen; read metadata.yaml if one 404s.
+        out[iid] = f2p_failures(json.loads(get(f"{S3}/lite/{pick['system']}/logs/{iid}/report.json"))[iid])
+        print(f"{iid:40} {len(out[iid])} FAIL_TO_PASS failed")
+    LABELS.write_text(json.dumps(out, indent=2) + "\n")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--systems", type=int, default=12, help="how many of the strongest systems to try")
+    ap.add_argument("--labels", action="store_true", help="only write bench/failed_labels.json for the chosen patches")
     a = ap.parse_args()
+    if a.labels:
+        return labels()
     ranked = systems()[: a.systems]
     print("trying:", ", ".join(f"{n} ({len(r)})" for n, _, r in ranked))
 
