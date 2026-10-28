@@ -153,6 +153,16 @@ def app(root, monkeypatch, query=None):
     return at.run()
 
 
+def test_app_is_a_local_viewer_without_launcher_by_default(root, monkeypatch):
+    monkeypatch.setattr(data, "ROOT", root)
+    monkeypatch.delenv("RED2FIX_ENABLE_LAUNCH", raising=False)
+    at = AppTest.from_file("../dashboard/app.py", default_timeout=30).run()
+    assert not at.exception, at.exception
+    page = "".join(m.value for m in at.markdown)
+    assert "Red2Fix local run viewer" in page and "Internal tool; the public site is" in page
+    assert not at.sidebar.button  # no Run or Review buttons
+
+
 def test_app_renders_a_review_verdict_card(root, monkeypatch):
     at = app(root, monkeypatch, "review-good")
     assert not at.exception, at.exception

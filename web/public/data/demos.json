@@ -1,0 +1,58 @@
+[
+ {
+  "name": "good",
+  "verdict": "proven",
+  "cost_usd": 0.0229,
+  "seconds": 21.6,
+  "searches": 0,
+  "trace_url": null
+ },
+ {
+  "name": "wrong",
+  "verdict": "doesnt_fix",
+  "cost_usd": 0.0188,
+  "seconds": 18.5,
+  "searches": 0,
+  "trace_url": null
+ },
+ {
+  "name": "breaks",
+  "verdict": "breaks_tests",
+  "cost_usd": 0.0373,
+  "seconds": 30.6,
+  "searches": 0,
+  "trace_url": null
+ },
+ {
+  "name": "restricted",
+  "verdict": "needs_review",
+  "cost_usd": 0.04,
+  "seconds": 30.3,
+  "searches": 0,
+  "trace_url": null
+ },
+ {
+  "name": "inject",
+  "verdict": "doesnt_fix",
+  "cost_usd": 0.0393,
+  "seconds": 36.4,
+  "searches": 0,
+  "trace_url": null
+ },
+ {
+  "name": "inject2",
+  "verdict": "needs_review",
+  "cost_usd": 0.0276,
+  "seconds": 43.6,
+  "searches": 0,
+  "trace_url": null
+ },
+ {
+  "name": "dep-advisory",
+  "verdict": "needs_review",
+  "cost_usd": 0.0419,
+  "seconds": 33.9,
+  "searches": 2,
+  "trace_url": "https://smith.langchain.com/o/36ecb66a-7745-4db1-9ff9-d62cf6004c4a/a/red2fix/projects/p/d3ff423f-a632-4e56-b5e2-947caac3b89a/r/01a1838e-2c5a-7c78-a512-5f077e9051c5?poll=true"
+ }
+]

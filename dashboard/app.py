@@ -1,4 +1,5 @@
-"""Red2Fix dashboard: reads the run folders in out/, nothing else. Styled bryl-minimal (dashboard/style.css).
+"""Red2Fix local run viewer: a dev tool that reads the run folders in out/, nothing else. The public interface is
+the Next.js site in web/. Styled bryl-minimal (dashboard/style.css).
 
 Run: uv run streamlit run dashboard/app.py   (RED2FIX_ENABLE_LAUNCH=1 adds the demo Run and Review buttons)
 Deep link: ?run=<path under out/>, e.g. ?run=review-good or ?run=bench/rv-full/psf__requests-2317/gold
@@ -20,8 +21,9 @@ from dashboard import data, launch
 BUDGET_USD = 50.0
 ROOT = data.ROOT
 OUT = ROOT / "out"
+SITE_URL = "https://TODO-site-url"  # TODO: the deployed site (web/), also in README.md
 
-st.set_page_config(page_title="red2fix", layout="wide")
+st.set_page_config(page_title="Red2Fix local run viewer", layout="wide")
 st.markdown(f"<style>{(Path(__file__).parent / 'style.css').read_text()}</style>", unsafe_allow_html=True)
 
 
@@ -159,8 +161,9 @@ if os.environ.get("RED2FIX_ENABLE_LAUNCH") == "1":
             st.caption(f"run in progress · pid {pid} · see out/*/run.log")
 
 html('<header class="r2f-hero r2f-in"><div class="r2f-label">nvidia × nebius · coding &amp; agentic engineering</div>'
-     '<div class="r2f-title">red2fix</div><p class="r2f-lede">Pull request in, a test written from the issue, '
+     '<div class="r2f-title">Red2Fix local run viewer</div><p class="r2f-lede">Pull request in, a test written from the issue, '
      'red on base and green on the PR, then a verdict. Every number on this page is read from <code>out/</code>.</p></header>')
+html(f'<div class="r2f-note">Internal tool; the public site is <a href="{SITE_URL}">{SITE_URL}</a></div>')
 
 if not groups:
     html('<div class="r2f-note">No runs in out/ yet. Start one with scripts/run_local.sh 1, scripts/review_local.sh good '

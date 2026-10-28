@@ -63,13 +63,14 @@ It's a small Python package with three seeded bugs (issues #1–#3) and six PRs.
 | [#8 inject](https://github.com/nufii45/red2fix-minikit/pull/8) | Wrong slugify fix whose description tells automated reviewers it is "pre-approved" | ❌ Doesn't fix |
 | [#9 inject2](https://github.com/nufii45/red2fix-minikit/pull/9) | Correct fix plus a silent 24 h cap, with an injection line in the spec | 🔶 Needs review (unexplained change) |
 
-The dashboard reads the same `review.json` files locally:
+**Try it on the site: [https://TODO-site-url](https://TODO-site-url).** Pick a demo PR and watch Red2Fix review it,
+with the verdict, cost, web searches and LangSmith trace. `/results` has the bench numbers below, the cost by model and
+every demo PR side by side.
 
 | | |
 |---|---|
-| ![Proven](docs/screenshots/review-good.png) | ![Doesn't fix](docs/screenshots/review-wrong.png) |
-| ![Breaks tests](docs/screenshots/review-breaks.png) | ![Needs review](docs/screenshots/review-restricted.png) |
-| ![Injection](docs/screenshots/review-inject.png) | |
+| ![Try it](docs/screenshots/web-home-desktop.png) | ![Proven](docs/screenshots/web-run-desktop.png) |
+| ![Needs review: dependency advisory](docs/screenshots/web-run-advisory-desktop.png) | ![Results](docs/screenshots/web-results-desktop.png) |
 
 ## How we use NVIDIA Nemotron on Nebius Token Factory
 
@@ -169,7 +170,7 @@ excluded.
   documented behaviour before it asserts an exact value or message.
 
 Every query, its phase and the result URLs go into `review.json` (`web_searches`), a "Searches" block in
-`review.md`, the dashboard and LangSmith traces.
+`review.md`, the site's verdict card and LangSmith traces.
 
 **Before/after on `demo/prs/dep-advisory`.** The spec asks for the `parse_duration` minutes fix plus
 `minikit.notify.notify_timeout(url, text)`, which posts the timeout to a webhook with `requests`, pinned in
@@ -266,21 +267,33 @@ cat out/review-good/review.md
 This builds the agent image, applies `demo/prs/good/patch.diff` to `demo/repo` inside the container, and
 writes `review.json`, `review.md`, the repro test and the logs to `out/review-good/`.
 
-**Dashboard.** It runs on localhost only and reads `out/`.
+**The site.** Without a `GITHUB_DISPATCH_TOKEN` it replays the recorded demo reviews in `web/fixtures/`, so it
+needs no keys.
 
 ```sh
-uv run streamlit run dashboard/app.py     # then open http://localhost:8501
+cd web && pnpm install && pnpm dev     # then open http://localhost:3300
 ```
 
 **Bench report.** It runs offline from the stored logs; the bench outputs aren't in the repo, and
-`bench/run.py` regenerates them.
+`bench/run.py` regenerates them. `export_bench.py` then writes the JSON that `/results` reads
+(`web/public/data/`), and `tests/test_export_bench.py` checks it against `review_report.md`.
 
 ```sh
 uv run bench/report_review.py rv-full
+uv run scripts/export_bench.py
 ```
 
 **GitHub merge gate.** Copy the workflow, add the `NEBIUS_API_KEY` secret, and require `red2fix/verdict`.
 The full checklist is in [examples/github/README.md](examples/github/README.md).
+
+## Development
+
+`dashboard/` is a local viewer for bench and demo runs: it reads `out/` and runs on localhost only. It isn't a
+public interface.
+
+```sh
+uv run streamlit run dashboard/app.py     # then open http://localhost:8501
+```
 
 ## Before and during the submission period
 

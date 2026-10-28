@@ -20,22 +20,29 @@
  "verdicts": {
   "gold": {
    "doesnt_fix": 5,
-   "unproven": 8,
+   "needs_review": 6,
    "breaks_tests": 1,
+   "unproven": 2,
    "error": 3,
    "proven": 3
   },
   "failed": {
    "error": 6,
    "doesnt_fix": 3,
-   "unproven": 7,
+   "needs_review": 5,
    "breaks_tests": 2,
-   "proven": 2
+   "proven": 2,
+   "unproven": 2
   }
  },
- "settings_identical": true,
+ "settings_identical": false,
  "unproven": 12,
  "errors": 9,
+ "errors_by_cause": {
+  "amd64 emulation": 4,
+  "budget cap": 3,
+  "patch doesn't apply": 2
+ },
  "median_usd": 0.4639,
  "median_s": 198.2,
  "total_usd": 19.49,
@@ -43,6 +50,16 @@
   "ultra": 1565,
   "super": 0,
   "nano": 40
+ },
+ "cost_by_model": {
+  "ultra": {
+   "calls": 1565,
+   "usd": 19.4843
+  },
+  "nano": {
+   "calls": 40,
+   "usd": 0.0056
+  }
  },
  "instances": [
   {
@@ -68,7 +85,7 @@
     "truly_failed": true
    },
    "gold": {
-    "verdict": "unproven",
+    "verdict": "needs_review",
     "cost_usd": 0.5544,
     "seconds": 220.6
    }
@@ -76,7 +93,7 @@
   {
    "id": "astropy__astropy-14365",
    "failed": {
-    "verdict": "unproven",
+    "verdict": "needs_review",
     "cost_usd": 0.2532,
     "seconds": 152.1,
     "truly_failed": true
@@ -90,13 +107,13 @@
   {
    "id": "astropy__astropy-14995",
    "failed": {
-    "verdict": "unproven",
+    "verdict": "needs_review",
     "cost_usd": 0.3457,
     "seconds": 151.2,
     "truly_failed": true
    },
    "gold": {
-    "verdict": "unproven",
+    "verdict": "needs_review",
     "cost_usd": 0.2945,
     "seconds": 174.1
    }
@@ -118,7 +135,7 @@
   {
    "id": "mwaskom__seaborn-2848",
    "failed": {
-    "verdict": "unproven",
+    "verdict": "needs_review",
     "cost_usd": 0.7457,
     "seconds": 438.0,
     "truly_failed": true
@@ -132,13 +149,13 @@
   {
    "id": "mwaskom__seaborn-3010",
    "failed": {
-    "verdict": "unproven",
+    "verdict": "needs_review",
     "cost_usd": 0.4483,
     "seconds": 208.6,
     "truly_failed": true
    },
    "gold": {
-    "verdict": "unproven",
+    "verdict": "needs_review",
     "cost_usd": 0.2376,
     "seconds": 170.6
    }
@@ -208,7 +225,7 @@
     "truly_failed": true
    },
    "gold": {
-    "verdict": "unproven",
+    "verdict": "needs_review",
     "cost_usd": 0.0201,
     "seconds": 37.6
    }
@@ -306,7 +323,7 @@
     "truly_failed": false
    },
    "gold": {
-    "verdict": "unproven",
+    "verdict": "needs_review",
     "cost_usd": 0.1619,
     "seconds": 88.2
    }
@@ -314,13 +331,13 @@
   {
    "id": "pytest-dev__pytest-7490",
    "failed": {
-    "verdict": "unproven",
+    "verdict": "needs_review",
     "cost_usd": 0.8325,
     "seconds": 254.4,
     "truly_failed": true
    },
    "gold": {
-    "verdict": "unproven",
+    "verdict": "needs_review",
     "cost_usd": 0.9272,
     "seconds": 291.5
    }

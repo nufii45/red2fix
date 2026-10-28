@@ -208,7 +208,8 @@ button.row { width: 100%; background: none; border-width: 0 0 1px; font: inherit
 .table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
 .table th { text-align: left; font: 10px var(--mono); text-transform: uppercase; letter-spacing: 1px; color: var(--g500); font-weight: 400; padding: 0.6rem 0.5rem 0.5rem 0; border-bottom: 1px solid var(--g200); }
 .table td { padding: 0.55rem 0.5rem 0.55rem 0; border-bottom: 1px solid var(--g200); vertical-align: top; }
-.table .r { text-align: right; padding-right: 0; }
+.table .r { text-align: right; padding-right: 0; padding-left: 0.75rem; }
+.table .r + :not(.r) { padding-left: 0.75rem; }
 .table-wrap { overflow-x: auto; }
 
 .actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1.5rem; }
