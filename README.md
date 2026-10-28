@@ -188,6 +188,13 @@ What this does and doesn't show:
   blocker. On the open web, a search-on run also cited a page about requests 2.16.0. Since then, advisory
   searches go only to osv.dev, nvd.nist.gov, cve.org, pypi.org, security.snyk.io and advisories.gitlab.com,
   and the cited result must name the package and the exact version or an advisory id.
+- **Known triage weakness (open).** With the webhook in the spec, the first triage step (on Nano) usually
+  calls the claim "not testable", because posting to a webhook needs the network. It then skips the proof,
+  and the verdict is ⚠️ Unproven whatever the reviewer finds. The table's two runs were the 1 of 4 where it
+  said "testable". The other 3 were PR #11 on GitHub (first run, wording "Report job timeouts to the deploy
+  webhook…") and both local reruns after the issue was retitled to lead with the minutes bug. On PR #11's
+  rerun with search on, the advisory blocker still appeared in the comment, citing
+  https://security.snyk.io/package/pip/requests/2.19.1, but the verdict was ⚠️ Unproven.
 - One run each, so verdicts may differ between runs. The model gave the advisory blocker severity on its
   own. The code rule that raises sourced advisories to blocker is there for runs where it says "warning".
 - **The expected-behaviour use hasn't helped yet.** In the first dep-advisory run, LOCALIZE spent one search on
