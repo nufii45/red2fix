@@ -3,6 +3,7 @@ import os
 import time
 
 import config
+from agent import tracing
 
 
 class BudgetExceeded(Exception):
@@ -17,6 +18,10 @@ class LLM:
             from openai import OpenAI
 
             client = OpenAI(base_url=config.BASE_URL, api_key=os.environ["NEBIUS_API_KEY"])
+            if tracing.ENABLED:
+                from langsmith.wrappers import wrap_openai
+
+                client = wrap_openai(client)
         self.client = client
         self.ledger_path = ledger_path
         self.max_usd = max_usd

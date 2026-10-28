@@ -7,6 +7,6 @@ cd "$(dirname "$0")/.."
 [ -d "demo/prs/$name" ] || { echo "no demo PR: demo/prs/$name" >&2; exit 2; }
 docker build -q -t red2fix-agent . >/dev/null
 mkdir -p "out/review-$name"
-docker run --rm --env-file .env \
+docker run --rm --env-file .env ${LANGSMITH_API_KEY:+-e LANGSMITH_API_KEY} \
   -v "$PWD/demo/repo:/src:ro" -v "$PWD/demo/prs/$name:/pr:ro" -v "$PWD/out/review-$name:/out" \
   red2fix-agent agent.review --repo /src --spec /pr/spec.md --patch /pr/patch.diff --out /out --number 1

@@ -8,7 +8,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import config
-from agent import guards
+from agent import guards, tracing
 
 CMD_TIMEOUT = 30
 # In SWE-bench images the agent runs on its own Python; tests must use the repo's env.
@@ -34,6 +34,9 @@ def _resolve(root, path):
     # In CI .git holds the PR's head commits; reading it would leak the diff before REPRODUCE.
     if p.is_relative_to(root / ".git"):
         raise ValueError(f"path is inside .git: {path}")
+    # Secrets would reach the model and the trace.
+    if p.name.startswith(".env"):
+        raise ValueError(f"path is an env file: {path}")
     return p
 
 
@@ -58,7 +61,7 @@ def read_file(root, path, start=1, end=None):
 
 def grep(root, pattern):
     # "--" so a pattern starting with "-" is not read as a flag.
-    out = _run(root, ["git", "grep", "-n", "-E", "--", pattern]).stdout
+    out = _run(root, ["git", "grep", "-n", "-E", "--", pattern, ":(exclude,glob)**/.env*"]).stdout
     return _truncate(out, keep="head") or "(no matches)"
 
 
@@ -172,6 +175,13 @@ SPECS = {
 
 def call(root, name, args, allow, protect_tests=False):
     """Run a model-requested tool. Errors come back as text so a bad call never crashes the run."""
+    with tracing.span(f"tool:{name}", "tool", args) as record:
+        out = _call(root, name, args, allow, protect_tests)
+        record(out)
+    return out
+
+
+def _call(root, name, args, allow, protect_tests):
     if name not in allow:
         return f"error: tool {name} is not available in this phase"
     if protect_tests and name in ("edit_file", "write_file") and guards.is_test_file(str(args.get("path", ""))):

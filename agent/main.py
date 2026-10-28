@@ -5,6 +5,7 @@ Usage: python -m agent.main --repo DIR --issue FILE --out DIR [--number N] [--wo
 
 import argparse
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -14,7 +15,7 @@ from collections import Counter
 from pathlib import Path
 
 import config
-from agent import guards, prompts, tools
+from agent import guards, prompts, tools, tracing
 from agent.llm import LLM, BudgetExceeded
 
 READ = ["list_files", "read_file", "grep"]
@@ -63,6 +64,7 @@ class Run:
         self.result["phase"] = name
         print(f"PHASE {name}", flush=True)
         self.event(ev="phase", name=name, iteration=self.result["iterations"])
+        tracing.phase(name)
         self.check_time()
 
     def event(self, **row):
@@ -362,6 +364,15 @@ ARTIFACTS = ["result.json", "events.jsonl", "ledger.jsonl", "repro_test.py", "re
              "review.json", "review.md", "head.log", "suggested_fix.diff"]
 
 
+def trace_target(repo, number):
+    """Root-trace metadata naming what was run: the repo, and the PR URL or bench instance."""
+    gh = os.environ.get("GITHUB_REPOSITORY")
+    target = (f"{os.environ.get('GITHUB_SERVER_URL', 'https://github.com')}/{gh}/pull/{number}" if gh
+              else os.environ.get("RED2FIX_INSTANCE") or f"#{number}")
+    return {"repo": gh or Path(repo).name, "target": target}
+
+
+@tracing.traceable(name="fix", process_inputs=tracing.root_inputs)
 def run_agent(repo, issue_path, out, number, work, llm=None, suite=(), max_seconds=config.MAX_SECONDS):
     out.mkdir(parents=True, exist_ok=True)
     # A rerun must not inherit the previous run's ledger or logs.
@@ -396,6 +407,10 @@ def run_agent(repo, issue_path, out, number, work, llm=None, suite=(), max_secon
         run.result.update(status="aborted", abort_reason=f"error:{type(e).__name__}: {e}")
     finally:
         run.result.update(cost_usd=round(llm.spent, 6), seconds=round(time.monotonic() - run.start, 1))
+        url = tracing.finish(mode="fix", **trace_target(repo, number), verdict=run.result["status"],
+                             cost_usd=run.result["cost_usd"])
+        if url:
+            run.result["trace_url"] = url
         run.save("result.json", json.dumps(run.result, indent=2))
         run.event(ev="end", status=run.result["status"], abort_reason=run.result["abort_reason"])
         print("RESULT", json.dumps(run.result), flush=True)

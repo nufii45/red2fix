@@ -3,6 +3,7 @@ name = "red2fix"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
+    "langsmith>=0.14.14",
     "openai>=3.35.1",
 ]
 
