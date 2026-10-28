@@ -22,9 +22,11 @@ def tavily(monkeypatch):
 def test_excluded_domains_are_always_sent(tavily, tmp_path):
     (tmp_path / "setup.py").write_text('setup(url="https://flask.palletsprojects.com/", project_urls={"Code": "https://github.com/x"})')
     s = search.Search(tmp_path / "ledger.jsonl", search.project_hosts(tmp_path))
-    text, urls = s.query("REPRODUCE", "werkzeug Blueprint name")
+    text, results = s.query("REPRODUCE", "werkzeug Blueprint name")
+    urls = [r["url"] for r in results]
 
     assert tavily[0]["exclude_domains"] == search.EXCLUDE + ["flask.palletsprojects.com"]
+    assert "include_domains" not in tavily[0]
     assert tavily[0]["max_results"] == 3 and urls == [f"https://docs.example/{i}" for i in range(3)]
     assert "x" * 1500 in text and "x" * 1501 not in text and "untrusted" in text
     row = json.loads((tmp_path / "ledger.jsonl").read_text())
@@ -100,3 +102,22 @@ def test_dependencies_in_every_file_format():
     assert search.dependencies(review.diff_sections(DEPS)) == [
         ("requests", "2.19.1"), ("PyYAML", "5.3.1"), ("jinja2", "2.10"), ("urllib3", "1.24.1"), ("Django", "2.2.0"),
     ]
+
+
+def test_include_domains_replace_the_exclude_list(tavily, tmp_path):
+    s = search.Search(tmp_path / "ledger.jsonl")
+    s.query("REVIEW", "requests 2.19.1 security advisory", model=False, include=search.ADVISORY_DOMAINS)
+    assert tavily[0]["include_domains"] == search.ADVISORY_DOMAINS and "exclude_domains" not in tavily[0]
+
+
+@pytest.mark.parametrize("title,content,ok", [
+    ("CVE-2018-18074 Detail", "Requests before 2.20.0 sends an HTTP Authorization header", True),  # name + CVE id
+    ("requests", "Version 2.19.1 is affected", True),                                              # name + exact version
+    ("requests 2.16.0", "leaks the Authorization header on redirect", False),                     # another version, no id
+    ("urllib3 advisory", "CVE-2019-11324 in 2.19.1", False),                                        # another package
+    ("requests", "fixed in 2.19.10", False),                                                        # not the exact version
+    ("requests-oauthlib", "GHSA-x84v-xcm2-53pg", False),                                            # another package's name
+    ("requests", "see ghsa-x84v-xcm2-53pg", True),                                                  # GHSA id, any case
+])
+def test_corroborates(title, content, ok):
+    assert search.corroborates({"title": title, "content": content}, "requests", "2.19.1") is ok

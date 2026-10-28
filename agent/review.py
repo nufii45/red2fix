@@ -40,7 +40,8 @@ def severity(finding, policy):
     """The finding's severity, raised to blocker for a quoted unrelated change to non-test code when
     policy unrelated_change = "blocker": the tests only prove the spec's claim, and the reviewer's own
     severity for such a change proved unreliable (inject2). Likewise for a sourced dependency advisory when
-    policy advisory = "blocker"; sourced() has already dropped every advisory finding without a searched URL.
+    policy advisory = "blocker"; sourced() has already dropped every advisory finding without a corroborating
+    searched URL.
     """
     if (
         policy.get("advisory", "blocker") != "warning"  # a typo fails closed
@@ -206,33 +207,39 @@ def grounded(findings, patch):
     return kept, dropped
 
 
-def sourced(findings, urls):
-    """(kept, dropped): an advisory finding must cite a URL the dependency search really returned, so an
-    advisory from the model's memory falls out, with or without search."""
+def sourced(findings, evidence):
+    """(kept, dropped): an advisory finding must cite a URL the dependency search really returned, whose own
+    title or content names the searched package and its exact version or a CVE/GHSA id. So an advisory from
+    the model's memory, or one backed by a page about another version, falls out, with or without search.
+
+    evidence: {url: (result, package, version)} from dependency_search.
+    """
     kept, dropped = [], []
     for f in findings:
-        ok = (f.get("rule") or "").strip().lower() != ADVISORY_RULE.lower() or f.get("source") in urls
+        found = evidence.get(f.get("source"))
+        ok = (f.get("rule") or "").strip().lower() != ADVISORY_RULE.lower() or bool(found and search.corroborates(*found))
         (kept if ok else dropped).append(f)
     return kept, dropped
 
 
 def dependency_search(run, sections):
-    """(results text, result urls) for the dependencies the diff adds or changes: every advisory query, then
-    every deprecation query, until the search budget runs out. Empty when search is off."""
+    """(results text, {url: (result, package, version)}) for the dependencies the diff adds or changes: every
+    advisory query, then every deprecation query, until the search budget runs out. Empty when search is off."""
     deps = search.dependencies(sections)
     if not (run.search and deps):
-        return "", []
-    blocks, urls = [], []
-    for q in [f"{n} {v} security advisory" for n, v in deps] + [f"{n} {v} deprecated" for n, v in deps]:
-        text, found = run.search.query("REVIEW", q, model=False)
+        return "", {}
+    blocks, evidence = [], {}
+    queries = [(f"{n} {v} security advisory", n, v) for n, v in deps] + [(f"{n} {v} deprecated", n, v) for n, v in deps]
+    for q, name, version in queries:
+        text, results = run.search.query("REVIEW", q, model=False, include=search.ADVISORY_DOMAINS)
         if text == search.BUDGET_USED:
             break
         blocks.append(f"Query: {q}\n{text}")
-        urls += found
-    return "\n\n".join(blocks), urls
+        evidence.update({r.get("url"): (r, name, version) for r in results})
+    return "\n\n".join(blocks), evidence
 
 
-def review_diff(run, policy, patch, evidence, advisories=("", [])):
+def review_diff(run, policy, patch, evidence, advisories=("", {})):
     run.phase("REVIEW")
     results, urls = advisories
     rubric = "\n".join(f"- {r}" for r in policy["rubric"] + ([ADVISORY_RULE] if results else []))

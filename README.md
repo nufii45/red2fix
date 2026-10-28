@@ -158,9 +158,11 @@ excluded.
 
 - **Dependency advisories (REVIEW).** When a PR adds or changes a pin in `requirements*.txt`,
   `pyproject.toml`, `setup.py` or `setup.cfg`, Red2Fix parses it without a model and searches
-  "`<package> <version>` security advisory" and "… deprecated". A finding under "No dependencies with known
-  advisories" has to cite a URL those searches returned. Without one it's dropped, and with one it's a
-  blocker (policy `advisory = "blocker"`).
+  "`<package> <version>` security advisory" and "… deprecated", only on osv.dev, nvd.nist.gov, cve.org, pypi.org,
+  security.snyk.io and advisories.gitlab.com. A finding under "No dependencies with known advisories" has to
+  cite one of those results, and that result's own title or text must name the package and either the exact
+  version or a CVE/GHSA id. Otherwise it's dropped. A finding that passes is a blocker (policy
+  `advisory = "blocker"`).
 - **Expected behaviour (LOCALIZE, REPRODUCE).** The model may call `search_docs` to check a library's
   documented behaviour before it asserts an exact value or message.
 
@@ -173,14 +175,19 @@ Every query, its phase and the result URLs go into `review.json` (`web_searches`
 | | Verdict | Cost | What the reviewer said about the pin |
 |---|---|---|---|
 | Search off | ✅ Proven | $0.02, 15 s | "unrelated to the spec", a warning |
-| Search on | 🔶 Needs review | $0.03, 31 s | blocker: known advisories, citing a searched URL |
+| Search on, open web | 🔶 Needs review | $0.03, 31 s | blocker: known advisories, citing a VersionEye page for requests **2.16.0** |
+| Search on, advisory domains + check | 🔶 Needs review | $0.02, 28 s | blocker: known advisories, citing https://security.snyk.io/package/pip/requests/2.19.1 |
 
 What this does and doesn't show:
-- The cited source is weak. It's a VersionEye page for requests **2.16.0**, about the redirect auth-header
-  leak. The top results didn't include the CVE-2018-18074 NVD entry. The finding is right, but its evidence
-  isn't the page you'd want.
-- The model gave the finding blocker severity on its own in this run, so the code rule that raises sourced
-  advisories to blocker didn't decide this verdict. It's there for runs where the model says "warning".
+- On the open web, the first search-on run cited a page about another version. That's why advisory searches
+  are now limited to vulnerability databases and the package index, and why the cited result must name the
+  package and the exact version or an advisory id. The rerun cited Snyk's page for requests 2.19.1 (the
+  redirect auth-header leak, upgrade to 2.20).
+- One run each, so the verdicts vary from run to run. In the last run the reviewer also rated the
+  `requirements.txt` file a blocker as unrelated to the spec, where the search-off run called it a warning,
+  so search wasn't the only blocker there. In both search-on runs the model gave the advisory blocker
+  severity on its own. The code rule that raises sourced advisories to blocker is there for runs where the
+  model says "warning".
 - **The expected-behaviour use hasn't helped yet.** In the dep-advisory run, LOCALIZE spent one search on
   Python `re` docs, which changed nothing. On `demo/prs/wrong` with search on there were zero searches (still
   ❌ Doesn't fix). REPRODUCE never searched in either run. On the bench it's off, so its effect on the 5

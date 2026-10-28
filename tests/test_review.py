@@ -394,7 +394,7 @@ def opt_in_web_search(repo, monkeypatch, sent):
 
     def post(payload):
         sent.append(payload)
-        return {"results": [{"title": "advisory", "url": ADVISORY_URL, "content": "CVE-2018-18074 affects < 2.20.0"}]}
+        return {"results": [{"title": "requests advisory", "url": ADVISORY_URL, "content": "CVE-2018-18074 affects < 2.20.0"}]}
 
     monkeypatch.setattr(review.search, "post", post)
 
@@ -434,7 +434,7 @@ def test_search_on_offers_the_tool_and_searches_dependencies(buggy_repo, tmp_pat
     assert {"localize", "reproduce"} <= {p for p, names in llm.tools if "search_docs" in names}
     # 2 dependency searches reserved of 3; REPRODUCE never searched here.
     assert [s["query"] for s in rv["web_searches"]] == ["requests 2.19.1 security advisory", "requests 2.19.1 deprecated"]
-    assert all(p["exclude_domains"][:4] == review.search.EXCLUDE for p in sent)
+    assert all(p["include_domains"] == review.search.ADVISORY_DOMAINS and "exclude_domains" not in p for p in sent)
     user = next(m[1]["content"] for p, m in llm.seen if p == "review")
     assert review.ADVISORY_RULE in user and ADVISORY_URL in user
     assert rv["verdict"] == "needs_review" and rv["findings"][-1]["source"] == ADVISORY_URL, rv
@@ -482,3 +482,12 @@ def test_advisory_warning_from_the_model_still_blocks_end_to_end(buggy_repo, tmp
     llm = FakeLLM(**script(review=[reply(json.dumps({"summary": "s", "findings": [found]}))]))
     rv = run(buggy_repo, tmp_path, make_patch(buggy_repo, GOOD, PIN), llm)
     assert rv["verdict"] == "needs_review" and review.ADVISORY_RULE in rv["verdict_reason"], rv
+
+
+def test_advisory_backed_by_a_page_about_another_version_is_dropped(buggy_repo, tmp_path, monkeypatch):
+    opt_in_web_search(buggy_repo, monkeypatch, [])
+    monkeypatch.setattr(review.search, "post", lambda payload: {"results": [
+        {"title": "requests 2.16.0", "url": ADVISORY_URL, "content": "leaks the Authorization header"}]})
+    llm = FakeLLM(**script(review=[reply(json.dumps({"summary": "s", "findings": [advisory(ADVISORY_URL)]}))]))
+    rv = run(buggy_repo, tmp_path, make_patch(buggy_repo, GOOD, PIN), llm)
+    assert rv["verdict"] == "proven" and [f["source"] for f in rv["dropped_findings"]] == [ADVISORY_URL], rv
