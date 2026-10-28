@@ -142,7 +142,9 @@ The rule changed 3 verdicts, all doesnt_fix → unproven:
 - gold pytest-7432 and pytest-7490
 - failed astropy-14995
 
-False and correct approvals are unchanged, because the rule never approves anything. The full per-instance
+False and correct approvals are unchanged, because the rule never approves anything. A later rule (an
+unproven review with a blocker finding is 🔶 Needs review, with both reasons listed) moves 11 recomputed
+verdicts from unproven to needs_review. Approvals are again unchanged. The full per-instance
 table comes from `uv run bench/report_review.py rv-full`. The analysis is in
 [`docs/bench-analysis.md`](docs/bench-analysis.md).
 
@@ -188,13 +190,27 @@ What this does and doesn't show:
   blocker. On the open web, a search-on run also cited a page about requests 2.16.0. Since then, advisory
   searches go only to osv.dev, nvd.nist.gov, cve.org, pypi.org, security.snyk.io and advisories.gitlab.com,
   and the cited result must name the package and the exact version or an advisory id.
-- **Known triage weakness (open).** With the webhook in the spec, the first triage step (on Nano) usually
-  calls the claim "not testable", because posting to a webhook needs the network. It then skips the proof,
-  and the verdict is ⚠️ Unproven whatever the reviewer finds. The table's two runs were the 1 of 4 where it
-  said "testable". The other 3 were PR #11 on GitHub (first run, wording "Report job timeouts to the deploy
-  webhook…") and both local reruns after the issue was retitled to lead with the minutes bug. On PR #11's
-  rerun with search on, the advisory blocker still appeared in the comment, citing
-  https://security.snyk.io/package/pip/requests/2.19.1, but the verdict was ⚠️ Unproven.
+- **Triage and reproduction are the weak link, not search.** With the webhook in the spec, the first triage
+  step (on Nano) called the whole claim "not testable" in 3 of 4 runs, skipping the proof, so the verdict was
+  ⚠️ Unproven whatever the reviewer found. That included PR #11 on GitHub, where the advisory blocker still
+  appeared, citing https://security.snyk.io/package/pip/requests/2.19.1. Three changes followed:
+  - Triage now calls a multi-claim spec testable when any one claim is, and tests that one.
+  - The verdict reason names the proven claim.
+  - Unproven plus a blocker is 🔶 Needs review, with both reasons listed.
+
+  A CVE/GHSA id in an advisory note that the cited page doesn't mention is removed. Then **3 local runs with
+  search on**:
+
+  | Run | Verdict | Why |
+  |---|---|---|
+  | 1 | ❌ Doesn't fix | Triage picked the minutes claim, but the repro also tested `notify_timeout` with a mock taking `json_data=` instead of `json=`, so a test bug failed a correct patch. The advisory blocker was there, but doesn't-fix outranks it. |
+  | 2 | 🔶 Needs review | Triage picked the webhook claim and no repro failed, so "no test showed…; blocker: No dependencies with known advisories". |
+  | 3 | 🔶 Needs review | Minutes claim proven; blockers: the advisory, and "unrelated to the spec" (the reviewer's own call). |
+
+  2 of 3 gave needs_review with the advisory blocker, $0.15 for the three. **0 of 3 named a correct CVE.**
+  All three cited Snyk's requests 2.19.1 page, whose search snippet carries no CVE id. Runs 1 and 2 named no
+  id, and run 3's note named CVE-2026-47754, which the page doesn't mention, so it was removed. The advisory
+  half works reliably; the proof half doesn't yet.
 - One run each, so verdicts may differ between runs. The model gave the advisory blocker severity on its
   own. The code rule that raises sourced advisories to blocker is there for runs where it says "warning".
 - **The expected-behaviour use hasn't helped yet.** In the first dep-advisory run, LOCALIZE spent one search on

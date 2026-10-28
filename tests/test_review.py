@@ -216,7 +216,8 @@ def test_review_sees_spec_and_diff_in_delimiters(buggy_repo, tmp_path):
     assert "Proof: proven" in user
 
 
-# decide(): precedence error > breaks_tests > doesnt_fix > unproven (require_proof) > needs_review > proven.
+# decide(): precedence error > breaks_tests > doesnt_fix > unproven (require_proof; a blocker turns it into
+# needs_review) > needs_review > proven.
 STRICT = {**DEFAULTS, "require_proof": True}
 LAX = {**DEFAULTS, "require_proof": False}
 BLOCKER = [{"rule": "r", "severity": "blocker"}]
@@ -228,9 +229,10 @@ WARNING = [{"rule": "r", "severity": "warning"}]
     ("proven", {"<suite timed out>"}, [], [], STRICT, "error"),
     ("doesnt_fix", {"t::x"}, BLOCKER, ["setup.py"], STRICT, "breaks_tests"),
     ("doesnt_fix", set(), BLOCKER, ["setup.py"], STRICT, "doesnt_fix"),
-    ("unproven", set(), BLOCKER, ["setup.py"], STRICT, "unproven"),
+    ("unproven", set(), BLOCKER, ["setup.py"], STRICT, "needs_review"),
+    ("unproven", set(), WARNING, ["setup.py"], STRICT, "unproven"),  # a restricted path alone doesn't lift unproven
     ("unreached", {"t::x"}, [], [], STRICT, "breaks_tests"),
-    ("unreached", set(), BLOCKER, ["setup.py"], STRICT, "unproven"),
+    ("unreached", set(), BLOCKER, ["setup.py"], STRICT, "needs_review"),
     ("unreached", set(), [], [], LAX, "unproven"),
     ("unproven", set(), BLOCKER, [], LAX, "needs_review"),
     ("unproven", set(), [], [], LAX, "unproven"),
@@ -491,3 +493,36 @@ def test_advisory_backed_by_a_page_about_another_version_is_dropped(buggy_repo, 
     llm = FakeLLM(**script(review=[reply(json.dumps({"summary": "s", "findings": [advisory(ADVISORY_URL)]}))]))
     rv = run(buggy_repo, tmp_path, make_patch(buggy_repo, GOOD, PIN), llm)
     assert rv["verdict"] == "proven" and [f["source"] for f in rv["dropped_findings"]] == [ADVISORY_URL], rv
+
+
+@pytest.mark.parametrize("proof,why", [
+    ("unproven", "no test showed the claimed behaviour failing on base"),
+    ("unreached", "the test never reached the changed code"),
+])
+def test_unproven_with_a_blocker_lists_both_reasons(proof, why):
+    verdict, reason = review.decide(proof, set(), BLOCKER + [{**BLOCKER[0], "rule": "s"}], [], STRICT)
+    assert verdict == "needs_review" and why in reason and "blocker: r" in reason and "blocker: s" in reason
+
+
+def test_reason_names_the_proven_claim_and_reproduce_gets_it(buggy_repo, tmp_path):
+    llm = FakeLLM(**script())
+    rv = run(buggy_repo, tmp_path, make_patch(buggy_repo, GOOD), llm)
+    assert rv["verdict"] == "proven" and rv["verdict_reason"].endswith("; proven claim: div(1, 0) returns None"), rv
+    reproduce_user = next(m[1]["content"] for p, m in llm.seen if p == "reproduce")
+    assert "Claim to test (one claim of the spec):\ndiv(1, 0) returns None" in reproduce_user
+
+
+PAGE = {"title": "requests 2.19.1 vulnerabilities", "url": ADVISORY_URL,
+        "content": "Information Exposure, CVE-2018-18074 (GHSA-x84v-xcm2-53pg). Upgrade to 2.20.0."}
+
+
+@pytest.mark.parametrize("note,kept,removed", [
+    ("leaks auth headers (CVE-2018-18074)", "leaks auth headers (CVE-2018-18074)", None),
+    ("CVE-2026-47754 leaks auth headers, see ghsa-x84v-xcm2-53pg", "leaks auth headers, see ghsa-x84v-xcm2-53pg",
+     ["CVE-2026-47754"]),
+    ("leaks auth headers (CVE-2026-47754)", "leaks auth headers", ["CVE-2026-47754"]),
+])
+def test_advisory_ids_not_on_the_cited_page_are_removed(note, kept, removed):
+    findings, dropped = review.sourced([{**advisory(ADVISORY_URL), "note": note}],
+                                       {ADVISORY_URL: (PAGE, "requests", "2.19.1")})
+    assert dropped == [] and findings[0]["note"] == kept and findings[0].get("removed_ids") == removed

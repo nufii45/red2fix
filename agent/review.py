@@ -94,13 +94,14 @@ def decide(proof, new_failures, findings, restricted_touched, policy, spec_sourc
         return "breaks_tests", "new failing tests: " + ", ".join(sorted(new_failures))
     if proof == "doesnt_fix":
         return "doesnt_fix", "the repro test still fails with the PR applied"
-    if proof == "unreached":
-        return "unproven", "the repro test fails the same way on base and head: the test never reached the changed code"
-    if proof == "unproven" and policy["require_proof"]:
-        return "unproven", "no test showed the claimed behaviour failing on base"
     blockers = [f for f in findings if severity(f, policy) == "blocker"]
+    why = [f"blocker: {f.get('rule')}" for f in blockers]
+    unproven = {"unreached": "the repro test fails the same way on base and head: the test never reached the changed code",
+                "unproven": "no test showed the claimed behaviour failing on base" if policy["require_proof"] else None}.get(proof)
+    if unproven:
+        # A blocker is a known problem, which says more than "no proof": show it, with the missing proof.
+        return ("needs_review", "; ".join([unproven, *why])) if blockers else ("unproven", unproven)
     if blockers or restricted_touched:
-        why = [f"blocker: {f.get('rule')}" for f in blockers]
         why += [f"restricted path: {p}" for p in restricted_touched]
         return "needs_review", "; ".join(why)
     if proof == "unproven":
@@ -215,9 +216,24 @@ def sourced(findings, evidence):
     kept, dropped = [], []
     for f in findings:
         found = evidence.get(f.get("source"))
-        ok = (f.get("rule") or "").strip().lower() != ADVISORY_RULE.lower() or bool(found and search.corroborates(*found))
+        advisory = (f.get("rule") or "").strip().lower() == ADVISORY_RULE.lower()
+        ok = not advisory or bool(found and search.corroborates(*found))
+        if ok and advisory:
+            unverified(f, found[0])
         (kept if ok else dropped).append(f)
     return kept, dropped
+
+
+def unverified(finding, result):
+    """Remove from the note every CVE/GHSA id the cited page doesn't mention (kept in "removed_ids")."""
+    page = f"{result.get('title') or ''}\n{result.get('content') or ''}".lower()
+    removed = [m.group(0) for m in search.ADVISORY_ID.finditer(finding.get("note") or "") if m.group(0).lower() not in page]
+    if removed:
+        note = finding["note"]
+        for i in removed:
+            note = note.replace(i, "")
+        finding["note"] = re.sub(r"\(\s*\)|\s{2,}", " ", note).replace(" ,", ",").strip()
+        finding["removed_ids"] = removed
 
 
 def dependency_search(run, sections):
@@ -374,9 +390,10 @@ def run_review(repo, spec_path, patch_path, out, number, work, llm=None, max_sec
             listing = "\n".join(paths)
             # Interface visible, implementation hidden: paths, signatures and changed-function names only.
             shape, run.new_names = pr_context.interface(work, patch, paths)
-            loc = localize(run, f"\n\nFiles changed by the pull request (paths only; the change itself is hidden):\n{listing}{shape}")
+            claim = f"\n\nClaim to test (one claim of the spec):\n{rv['claim']}" if rv["claim"] else ""
+            loc = localize(run, f"{claim}\n\nFiles changed by the pull request (paths only; the change itself is hidden):\n{listing}{shape}")
             try:
-                repro_code, red = reproduce(run, loc, shape + pr_context.related_test_block(work, paths, run.repro))
+                repro_code, red = reproduce(run, loc, claim + shape + pr_context.related_test_block(work, paths, run.repro))
             except Abort as e:
                 if str(e) != "no_repro":
                     raise
@@ -424,6 +441,8 @@ def run_review(repo, spec_path, patch_path, out, number, work, llm=None, max_sec
         rv["proof"]["result"] = proof  # lets bench/report_review.py recompute verdicts under other policies
         rv["verdict"], rv["verdict_reason"] = decide(
             proof, new_failures, rv["findings"], rv["restricted_paths_touched"], policy, spec_source)
+        if proof == "proven" and rv["claim"]:
+            rv["verdict_reason"] += f"; proven claim: {rv['claim']}"
         # Only with a repro to fix against (unproven has none). The verdict is final before this runs.
         if policy["suggest_fix"] and rv["verdict"] in ("doesnt_fix", "breaks_tests") and repro_code:
             rv["suggested_fix"] = suggest_fix(run, policy, loc, repro_code, baseline)
