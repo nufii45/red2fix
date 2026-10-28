@@ -84,6 +84,8 @@ def review_one(inst, kind, patch, out_root, max_seconds):
              "--spec", "/out/spec.md", "--patch", "/out/pr.patch", "--out", "/out", "--number", number_of(iid),
              # The problem statement is the issue, so the PR-description cap never applies on the bench.
              "--spec-source", "issue", "--max-seconds", str(max_seconds), "--repro-steps", "15",
+             # Off whatever the policy says: SWE-bench fixes are public, so a search could find the answer.
+             "--no-web-search",
              "--suite", *inst["test_files"]],
             stdout=log, stderr=subprocess.STDOUT,
         )

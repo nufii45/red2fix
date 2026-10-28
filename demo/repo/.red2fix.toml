@@ -1,0 +1,11 @@
+# Red2Fix policy for the demo (the same file as nufii45/red2fix-minikit's, plus web search).
+rubric = [
+  "Fixes the root cause described in the spec, not just the symptom",
+  "No changes unrelated to the spec",
+  "No weakened, skipped, xfailed or deleted tests",
+  "Handles the edge cases the spec mentions",
+]
+restricted_paths = [".github/**", ".red2fix.toml", "setup.py", "pyproject.toml", "setup.cfg"]
+require_proof = true
+budget_usd = 1.00
+web_search = true

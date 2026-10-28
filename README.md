@@ -149,6 +149,44 @@ table comes from `uv run bench/report_review.py rv-full`. The analysis is in
 Honest reading: Red2Fix has approved no truly broken patch so far, but it approves only 3 of 20 correct ones.
 Most correct patches are blocked, not proven.
 
+## Web search (Tavily)
+
+Off by default. It's on with `web_search = true` in `.red2fix.toml` plus a `TAVILY_API_KEY`, and the bench
+always turns it off, because SWE-bench fixes are public. There are at most 3 searches per review, and
+github.com, githubusercontent.com, gitlab.com, stackoverflow.com and the project's own sites are always
+excluded.
+
+- **Dependency advisories (REVIEW).** When a PR adds or changes a pin in `requirements*.txt`,
+  `pyproject.toml`, `setup.py` or `setup.cfg`, Red2Fix parses it without a model and searches
+  "`<package> <version>` security advisory" and "… deprecated". A finding under "No dependencies with known
+  advisories" has to cite a URL those searches returned. Without one it's dropped, and with one it's a
+  blocker (policy `advisory = "blocker"`).
+- **Expected behaviour (LOCALIZE, REPRODUCE).** The model may call `search_docs` to check a library's
+  documented behaviour before it asserts an exact value or message.
+
+Every query, its phase and the result URLs go into `review.json` (`web_searches`), a "Searches" block in
+`review.md`, the dashboard and LangSmith traces.
+
+**Before/after on `demo/prs/dep-advisory`** (the `good` duration fix plus `requirements.txt` pinning
+`requests==2.19.1`, which is affected by CVE-2018-18074, fixed in 2.20.0). One local run each:
+
+| | Verdict | Cost | What the reviewer said about the pin |
+|---|---|---|---|
+| Search off | ✅ Proven | $0.02, 15 s | "unrelated to the spec", a warning |
+| Search on | 🔶 Needs review | $0.03, 31 s | blocker: known advisories, citing a searched URL |
+
+What this does and doesn't show:
+- The cited source is weak. It's a VersionEye page for requests **2.16.0**, about the redirect auth-header
+  leak. The top results didn't include the CVE-2018-18074 NVD entry. The finding is right, but its evidence
+  isn't the page you'd want.
+- The model gave the finding blocker severity on its own in this run, so the code rule that raises sourced
+  advisories to blocker didn't decide this verdict. It's there for runs where the model says "warning".
+- **The expected-behaviour use hasn't helped yet.** In the dep-advisory run, LOCALIZE spent one search on
+  Python `re` docs, which changed nothing. On `demo/prs/wrong` with search on there were zero searches (still
+  ❌ Doesn't fix). REPRODUCE never searched in either run. On the bench it's off, so its effect on the 5
+  wrong-expected-value cases is unmeasured. Reading those cases, docs could plausibly have helped one or two
+  (flask-4045's message, astropy-14365's `serr` semantics). The others are arithmetic or layout mistakes.
+
 ## Limitations
 
 - **The proof is only as strong as the test Red2Fix writes.** Of the 7 gold patches rated doesnt_fix:
@@ -182,13 +220,14 @@ Needs [uv](https://docs.astral.sh/uv/), Docker and a Token Factory key.
 git clone https://github.com/nufii45/red2fix && cd red2fix
 uv sync
 echo 'NEBIUS_API_KEY=your-key' > .env
+# Optional: TAVILY_API_KEY=... (web search; demo/repo's policy turns it on), LANGSMITH_API_KEY=... and LANGSMITH_TRACING=true
 uv run pytest -q
 ```
 
 **Review a demo PR locally.** This uses the model, about $0.03 per review.
 
 ```sh
-scripts/review_local.sh good      # or: wrong, breaks, restricted, inject, inject2
+scripts/review_local.sh good      # or: wrong, breaks, restricted, inject, inject2, dep-advisory
 cat out/review-good/review.md
 ```
 

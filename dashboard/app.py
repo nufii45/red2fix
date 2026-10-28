@@ -101,6 +101,14 @@ def verdict_card(run):
         ("new failing tests", ", ".join(rv.get("suite", {}).get("new_failures", [])) or "none"),
         ("restricted paths", ", ".join(rv.get("restricted_paths_touched", [])) or "none"),
     ]
+    searches = "".join(
+        f'<div class="r2f-kv"><span class="r2f-label">search · {escape(str(s.get("phase") or "").lower())}</span><span>'
+        f'{escape(str(s.get("query") or ""))} → '
+        + (" · ".join(f'<a href="{escape(u)}" target="_blank">{escape(u)}</a>' for u in s.get("urls") or []
+                      if str(u).startswith("https://")) or escape(str(s.get("status") or "")))
+        + "</span></div>"
+        for s in rv.get("web_searches") or []
+    )
     calls = rv.get("calls") or {}
     mix = " / ".join(f"{k} {n}" for k, n in calls.items() if n) or "no model calls"
     links = [(label, rv[key]) for key, label in (("pr_url", "pull request ↗"), ("run_url", "workflow run ↗"))
@@ -111,6 +119,7 @@ def verdict_card(run):
         f'<div class="r2f-verdict">{escape(data.LABELS.get(rv["verdict"], rv["verdict"]))}</div>'
         f'<div class="r2f-note">{escape(rv.get("verdict_reason") or "")}</div>'
         + "".join(f'<div class="r2f-kv"><span class="r2f-label">{k}</span><span>{escape(str(v))}</span></div>' for k, v in rows)
+        + searches
         + f'<div class="r2f-kv"><span class="r2f-label">cost</span><span>${rv.get("cost_usd", 0):.3f} · '
           f'{rv.get("seconds", 0):.0f}s · {escape(mix)}</span></div>'
         + (f'<div class="r2f-kv"><span class="r2f-label">links</span><span>'
@@ -310,7 +319,9 @@ if "review" in run:
         cells = "".join(
             f"<tr><td>{escape(str(f.get('severity') or ''))}</td><td>{escape(str(f.get('rule') or ''))}</td>"
             f"<td>{escape((str(f.get('diff_file') or f.get('file') or '') + ':' + str(f.get('line') or '')).strip(':'))}</td>"
-            f"<td>{escape(str(f.get('note') or ''))}</td></tr>"
+            f"<td>{escape(str(f.get('note') or ''))}"
+            + (f' <a href="{escape(f["source"])}" target="_blank">source ↗</a>' if str(f.get("source") or "").startswith("https://") else "")
+            + "</td></tr>"
             for f in findings
         )
         html('<div class="r2f-label" style="margin-top:1rem">findings</div><table class="r2f-table"><tr><th>severity</th>'

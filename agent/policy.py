@@ -21,6 +21,10 @@ DEFAULTS = {
     # Off by default: it spends up to suggest_fix_budget_usd more on every PR that fails.
     "suggest_fix": False,
     "suggest_fix_budget_usd": 0.75,
+    # Tavily search (agent/search.py); also needs TAVILY_API_KEY. The bench always turns it off.
+    "web_search": False,
+    # "blocker": a dependency advisory finding backed by a searched URL blocks, whatever severity the reviewer gave it.
+    "advisory": "blocker",
 }
 
 

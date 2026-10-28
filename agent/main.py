@@ -56,6 +56,7 @@ class Run:
         self.repro = f"tests/test_repro_issue_{number}.py"
         self.repro_steps = 12
         self.new_names = set()  # names the PR adds (review mode); calling them may fail inside the test on base
+        self.search = None  # agent.search.Search when web search is on (review mode only)
         self.start = time.monotonic()
         self.result = {"status": "running", "phase": None, "abort_reason": None, "iterations": 0, "escalations": 0}
 
@@ -111,6 +112,8 @@ class Run:
                     return args["content"]
                 if tc.function.name == submit:
                     out = f'error: call {submit} with {{"content": "<the complete file>"}}'
+                elif tc.function.name == "search_docs" and self.search and isinstance(args, dict):
+                    out = self.search.query(phase.upper(), args.get("query"))[0]
                 elif isinstance(args, dict):
                     out = tools.call(self.root, tc.function.name, args, allow, protect_tests)
                 else:
@@ -147,10 +150,16 @@ def triage(run):
         raise Abort(f"out_of_scope: {t.get('reason', '')}")
 
 
+def searching(run, system, allow):
+    """(system, allow) with search_docs added only when search is on, so prompts are unchanged when it's off."""
+    return (system + prompts.SEARCH, allow + ["search_docs"]) if run.search else (system, allow)
+
+
 def localize(run, extra=""):
     run.phase("LOCALIZE")
     user = f"Issue:\n{run.issue}\n\nRepository files:\n{tools.list_files(run.root)}{extra}"
-    reply = run.tool_loop("localize", prompts.LOCALIZE, user, READ, max_steps=12)
+    system, allow = searching(run, prompts.LOCALIZE, READ)
+    reply = run.tool_loop("localize", system, user, allow, max_steps=12)
     return parse_json(reply) or {"hypothesis": reply}
 
 
@@ -205,8 +214,8 @@ def reproduce(run, loc, extra=""):
     for k in range(1, MAX_REPRO_ATTEMPTS + 1):
         run.phase("REPRODUCE")
         user = f"Issue:\n{run.issue}\n\nLocalization:\n{json.dumps(loc)}{extra}\n\nWrite the file {run.repro}.{feedback}"
-        reply = run.tool_loop("reproduce", prompts.REPRODUCE, user, READ + ["submit_test"], max_steps=run.repro_steps,
-                              submit="submit_test")
+        system, allow = searching(run, prompts.REPRODUCE, READ + ["submit_test"])
+        reply = run.tool_loop("reproduce", system, user, allow, max_steps=run.repro_steps, submit="submit_test")
         code = extract_code(reply)
         tools.write_file(run.root, run.repro, code)
 

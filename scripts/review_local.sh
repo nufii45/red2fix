@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Review one demo PR in Docker: demo/prs/<name>/{spec.md,patch.diff} against demo/repo.
-# Usage: scripts/review_local.sh <good|wrong|breaks|restricted|inject|inject2>   (needs Docker and NEBIUS_API_KEY in .env)
+# Usage: scripts/review_local.sh <good|wrong|breaks|restricted|inject|inject2|dep-advisory>   (needs Docker and NEBIUS_API_KEY in .env)
 set -euo pipefail
 name="${1:?usage: scripts/review_local.sh <name of a folder in demo/prs>}"
 cd "$(dirname "$0")/.."

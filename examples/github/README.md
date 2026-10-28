@@ -33,6 +33,8 @@ Red2Fix never calls the merge API.
    commit of `nufii45/red2fix`.
 2. Add a repo secret `NEBIUS_API_KEY`.
 3. Optional: add `.red2fix.toml` at the repo root (defaults below).
+4. Optional: secrets `TAVILY_API_KEY` (web search, with `web_search = true`) and `LANGSMITH_API_KEY`
+   (traces of every model call and search). Each is off when its secret is missing.
 
 ```toml
 rubric = [
@@ -45,6 +47,8 @@ restricted_paths = [".github/**", ".red2fix.toml", "setup.py", "pyproject.toml",
 require_proof = true   # ⚠️ Unproven blocks the merge
 unrelated_change = "blocker"   # or "warning": how a quoted unrelated change to non-test code counts
 budget_usd = 1.00
+web_search = false   # Tavily: REPRODUCE may check library docs, and dependency changes get advisory searches
+advisory = "blocker"   # or "warning": how a dependency advisory found by that search counts
 ```
 
 ## Branch protection and auto-merge checklist

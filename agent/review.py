@@ -7,6 +7,7 @@ The tree stays at base until APPLY_PR, so LOCALIZE and REPRODUCE only ever see t
 
 import argparse
 import json
+import os
 import re
 import shutil
 import time
@@ -14,8 +15,10 @@ import traceback
 from collections import Counter
 from pathlib import Path
 
+from langsmith import traceable
+
 import config
-from agent import guards, pr_context, prompts, tools
+from agent import guards, pr_context, prompts, search, tools
 from agent import policy as policies
 from agent.llm import LLM, BudgetExceeded
 from agent.main import ARTIFACTS, Abort, Run, check, fix, git, localize, parse_json, prepare, reproduce
@@ -27,6 +30,7 @@ LABELS = {
 }
 TEST_RULE = "No weakened, skipped, xfailed or deleted tests"
 UNRELATED_RULE = "No changes unrelated to the spec"
+ADVISORY_RULE = "No dependencies with known advisories"
 SECTION = re.compile(r"^_+ (.*\S) _+$")  # "____ test_x ____"; long names get a single "_" each side
 LOCATION = re.compile(r"^\S+?\.py:\d+:")  # "path:line: in func" per frame, "path:line: Exc" on the last
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
@@ -35,8 +39,15 @@ ANSI = re.compile(r"\x1b\[[0-9;]*m")
 def severity(finding, policy):
     """The finding's severity, raised to blocker for a quoted unrelated change to non-test code when
     policy unrelated_change = "blocker": the tests only prove the spec's claim, and the reviewer's own
-    severity for such a change proved unreliable (inject2).
+    severity for such a change proved unreliable (inject2). Likewise for a sourced dependency advisory when
+    policy advisory = "blocker"; sourced() has already dropped every advisory finding without a searched URL.
     """
+    if (
+        policy.get("advisory", "blocker") != "warning"  # a typo fails closed
+        and (finding.get("rule") or "").strip().lower() == ADVISORY_RULE.lower()
+        and finding.get("source")
+    ):
+        return "blocker"
     path = finding.get("diff_file") or ""
     changed = any(l.startswith(("+", "-")) for l in (finding.get("quote") or "").strip().splitlines())
     if (
@@ -195,19 +206,51 @@ def grounded(findings, patch):
     return kept, dropped
 
 
-def review_diff(run, policy, patch, evidence):
+def sourced(findings, urls):
+    """(kept, dropped): an advisory finding must cite a URL the dependency search really returned, so an
+    advisory from the model's memory falls out, with or without search."""
+    kept, dropped = [], []
+    for f in findings:
+        ok = (f.get("rule") or "").strip().lower() != ADVISORY_RULE.lower() or f.get("source") in urls
+        (kept if ok else dropped).append(f)
+    return kept, dropped
+
+
+def dependency_search(run, sections):
+    """(results text, result urls) for the dependencies the diff adds or changes: every advisory query, then
+    every deprecation query, until the search budget runs out. Empty when search is off."""
+    deps = search.dependencies(sections)
+    if not (run.search and deps):
+        return "", []
+    blocks, urls = [], []
+    for q in [f"{n} {v} security advisory" for n, v in deps] + [f"{n} {v} deprecated" for n, v in deps]:
+        text, found = run.search.query("REVIEW", q, model=False)
+        if text == search.BUDGET_USED:
+            break
+        blocks.append(f"Query: {q}\n{text}")
+        urls += found
+    return "\n\n".join(blocks), urls
+
+
+def review_diff(run, policy, patch, evidence, advisories=("", [])):
     run.phase("REVIEW")
-    rubric = "\n".join(f"- {r}" for r in policy["rubric"])
+    results, urls = advisories
+    rubric = "\n".join(f"- {r}" for r in policy["rubric"] + ([ADVISORY_RULE] if results else []))
     user = (
         f"Rubric:\n{rubric}\n\nEvidence (computed by running tests):\n{evidence}\n\n"
         f"<spec>\n{run.issue}\n</spec>\n\n<diff>\n{patch}\n</diff>"
     )
-    messages = [{"role": "system", "content": prompts.REVIEW}, {"role": "user", "content": user}]
+    if results:
+        user += f"\n\n<dependency_search>\n{results}\n</dependency_search>"
+    system = prompts.REVIEW + (prompts.REVIEW_ADVISORY if results else "")
+    messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
     for _ in range(2):
         text = run.llm.chat("review", messages).choices[0].message.content or ""
         data = parse_json(text)
         if valid_review(data):
-            data["findings"], data["dropped"] = grounded(data["findings"], patch)
+            kept, dropped = grounded(data["findings"], patch)
+            data["findings"], unsourced = sourced(kept, urls)
+            data["dropped"] = dropped + unsourced
             return data
         messages += [
             {"role": "assistant", "content": text},
@@ -254,7 +297,8 @@ def render_md(rv, out):
         lines += ["", "| Severity | Rule | Where | Note |", "|---|---|---|---|"]
         for f in rv["findings"]:
             where = f"{f.get('file')}:{f.get('line')}" if f.get("file") else ""
-            lines.append(f"| {cell(f.get('severity'))} | {cell(f.get('rule'))} | {cell(where)} | {cell(f.get('note'))} |")
+            note = f"{f.get('note') or ''} (source: {f['source']})" if f.get("source") else f.get("note")
+            lines.append(f"| {cell(f.get('severity'))} | {cell(f.get('rule'))} | {cell(where)} | {cell(note)} |")
     mix = " / ".join(f"{k.title()} {n}" for k, n in rv["calls"].items() if n) or "no model calls"
     lines += ["", f"**Cost:** ${rv['cost_usd']:.2f} · {int(rv['seconds'])}s · {mix}"]
     suggestion = out / "suggested_fix.diff"
@@ -265,11 +309,17 @@ def render_md(rv, out):
     repro = out / "repro_test.py"
     if repro.exists():
         lines += ["", "<details><summary>Repro test</summary>", "", "```python", repro.read_text().rstrip(), "```", "", "</details>"]
+    if rv.get("web_searches"):
+        lines += ["", f"<details><summary>Searches ({len(rv['web_searches'])})</summary>", ""]
+        lines += [f"- {s['phase']}: `{s['query']}` → {', '.join(s['urls']) or s['status']}" for s in rv["web_searches"]]
+        lines += ["", "</details>"]
     return "\n".join(lines) + "\n"
 
 
+@traceable(name="red2fix-review")
 def run_review(repo, spec_path, patch_path, out, number, work, llm=None, max_seconds=config.MAX_SECONDS,
-               spec_source="spec_file", head_sha=None, suite=(), repro_steps=12):
+               spec_source="spec_file", head_sha=None, suite=(), repro_steps=12, web_search=True):
+    """web_search=False turns search off whatever the policy says (the bench: the real fix is often online)."""
     out.mkdir(parents=True, exist_ok=True)
     for name in ARTIFACTS:
         (out / name).unlink(missing_ok=True)
@@ -284,6 +334,7 @@ def run_review(repo, spec_path, patch_path, out, number, work, llm=None, max_sec
         "base_sha": None, "head_sha": head_sha, "policy_sha": None, "require_proof": None, "spec_source": spec_source,
         "proof": {"repro_test": None, "base": None, "head": None},
         "suite": {"new_failures": []}, "findings": [], "dropped_findings": [], "restricted_paths_touched": [],
+        "web_search": False, "web_searches": [],
     }
     # Everything that can fail sits inside the try, so review.json and result.json are always written.
     try:
@@ -296,6 +347,11 @@ def run_review(repo, spec_path, patch_path, out, number, work, llm=None, max_sec
         paths = changed_paths(patch)
         rv["restricted_paths_touched"] = policies.restricted(paths, policy["restricted_paths"])
         rv["base_sha"] = git(work, "rev-parse", "HEAD").strip()
+        if web_search and policy["web_search"] and os.environ.get("TAVILY_API_KEY"):
+            run.search = search.Search(out / "ledger.jsonl", search.project_hosts(work))
+            # Keep the dependency searches' share of the cap, so REPRODUCE can't use it up first.
+            run.search.reserved = min(2 * len(search.dependencies(diff_sections(patch))), run.search.limit)
+            rv["web_search"] = True
         # Regression scope, as in main.run_agent; paths that don't exist on base are dropped.
         suite = run.suite = [s for s in suite if (work / s.split("::")[0]).exists()]
 
@@ -354,7 +410,7 @@ def run_review(repo, spec_path, patch_path, out, number, work, llm=None, max_sec
             f"New failing tests: {', '.join(rv['suite']['new_failures']) or 'none'}\n"
             f"Restricted paths touched: {', '.join(rv['restricted_paths_touched']) or 'none'}"
         )
-        review = review_diff(run, policy, patch, evidence)
+        review = review_diff(run, policy, patch, evidence, dependency_search(run, diff_sections(patch)))
         rv["summary"] = review.get("summary", "")
         rv["findings"] += review["findings"]
         rv["dropped_findings"] = review.get("dropped", [])
@@ -376,7 +432,8 @@ def run_review(repo, spec_path, patch_path, out, number, work, llm=None, max_sec
         rv.update(verdict="error", verdict_reason=f"error:{type(e).__name__}: {e}")
     finally:
         spent = run.llm.spent if run.llm else 0.0
-        rv.update(cost_usd=round(spent, 6), seconds=round(time.monotonic() - run.start, 1), calls=model_calls(out))
+        rv.update(cost_usd=round(spent, 6), seconds=round(time.monotonic() - run.start, 1), calls=model_calls(out),
+                  web_searches=run.search.log if run.search else [])
         ok = rv["verdict"] != "error"
         run.result.update(
             status="succeeded" if ok else "aborted", abort_reason=None if ok else rv["verdict_reason"],
@@ -403,9 +460,11 @@ def main():
     ap.add_argument("--head-sha", help="the PR head commit being reviewed")
     ap.add_argument("--suite", nargs="*", default=[], help="test files for the regression check (default: whole suite)")
     ap.add_argument("--repro-steps", type=int, default=12, help="tool steps per REPRODUCE attempt")
+    ap.add_argument("--no-web-search", action="store_true", help="never search, whatever the policy says (bench)")
     a = ap.parse_args()
     rv = run_review(a.repo, a.spec, a.patch, Path(a.out), a.number, Path(a.work), max_seconds=a.max_seconds,
-                    spec_source=a.spec_source, head_sha=a.head_sha, suite=a.suite, repro_steps=a.repro_steps)
+                    spec_source=a.spec_source, head_sha=a.head_sha, suite=a.suite, repro_steps=a.repro_steps,
+                    web_search=not a.no_web_search)
     raise SystemExit(1 if rv["verdict"] == "error" else 0)
 
 

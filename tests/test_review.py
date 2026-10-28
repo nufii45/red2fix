@@ -380,3 +380,105 @@ def test_rejected_attempts_are_saved(buggy_repo, tmp_path):
     assert sorted(p.name for p in d.iterdir()) == ["1.log", "1.py", "2.log", "2.py", "3.log", "3.py"]
     assert (d / "1.log").read_text().startswith("rejected: pytest exit 0")
     assert "assert True" in (d / "1.py").read_text()
+
+
+ADVISORY_URL = "https://docs.example/0"
+PIN = {"requirements.txt": "requests==2.19.1\n"}
+
+
+def opt_in_web_search(repo, monkeypatch, sent):
+    (repo / ".red2fix.toml").write_text("web_search = true\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-qm", "policy")
+    monkeypatch.setenv("TAVILY_API_KEY", "tvly-test")
+
+    def post(payload):
+        sent.append(payload)
+        return {"results": [{"title": "advisory", "url": ADVISORY_URL, "content": "CVE-2018-18074 affects < 2.20.0"}]}
+
+    monkeypatch.setattr(review.search, "post", post)
+
+
+def advisory(source):
+    return {"rule": review.ADVISORY_RULE, "severity": "blocker", "file": "requirements.txt", "line": 1,
+            "quote": "+requests==2.19.1", "note": "CVE-2018-18074", "source": source}
+
+
+@pytest.mark.parametrize("policy_on,key,flag", [(False, "tvly-test", True), (True, "", True), (True, "tvly-test", False)])
+def test_no_search_tool_unless_policy_key_and_flag(buggy_repo, tmp_path, monkeypatch, policy_on, key, flag):
+    sent = []
+    opt_in_web_search(buggy_repo, monkeypatch, sent)
+    if not policy_on:
+        (buggy_repo / ".red2fix.toml").write_text("web_search = false\n")
+        git(buggy_repo, "commit", "-qam", "off")
+    monkeypatch.setenv("TAVILY_API_KEY", key)
+    llm = FakeLLM(**script())
+    patch = make_patch(buggy_repo, GOOD, PIN)  # first: its reset removes untracked files from the repo (tmp_path)
+    spec = tmp_path / "spec.md"
+    spec.write_text("# div crashes on zero\n")
+    pr = tmp_path / "pr.diff"
+    pr.write_text(patch)
+    rv = review.run_review(buggy_repo, spec, pr, tmp_path / "out", 1, tmp_path / "work", llm=llm, web_search=flag)
+
+    assert rv["verdict"] == "proven" and rv["web_search"] is False and rv["web_searches"] == [], rv
+    assert sent == [] and not any("search_docs" in names for _, names in llm.tools)
+    assert all(review.ADVISORY_RULE not in m[1]["content"] for p, m in llm.seen if p == "review")
+
+
+def test_search_on_offers_the_tool_and_searches_dependencies(buggy_repo, tmp_path, monkeypatch):
+    sent = []
+    opt_in_web_search(buggy_repo, monkeypatch, sent)
+    llm = FakeLLM(**script(review=[reply(json.dumps({"summary": "s", "findings": [advisory(ADVISORY_URL)]}))]))
+    rv = run(buggy_repo, tmp_path, make_patch(buggy_repo, GOOD, PIN), llm)
+
+    assert {"localize", "reproduce"} <= {p for p, names in llm.tools if "search_docs" in names}
+    # 2 dependency searches reserved of 3; REPRODUCE never searched here.
+    assert [s["query"] for s in rv["web_searches"]] == ["requests 2.19.1 security advisory", "requests 2.19.1 deprecated"]
+    assert all(p["exclude_domains"][:4] == review.search.EXCLUDE for p in sent)
+    user = next(m[1]["content"] for p, m in llm.seen if p == "review")
+    assert review.ADVISORY_RULE in user and ADVISORY_URL in user
+    assert rv["verdict"] == "needs_review" and rv["findings"][-1]["source"] == ADVISORY_URL, rv
+    saved = json.loads((tmp_path / "out" / "review.json").read_text())
+    assert saved["web_search"] is True and len(saved["web_searches"]) == 2
+    md = (tmp_path / "out" / "review.md").read_text()
+    assert "<summary>Searches (2)</summary>" in md and f"(source: {ADVISORY_URL})" in md
+
+
+@pytest.mark.parametrize("source", [None, "https://made.up/advisory"])
+def test_advisory_finding_without_a_searched_source_is_dropped(buggy_repo, tmp_path, monkeypatch, source):
+    opt_in_web_search(buggy_repo, monkeypatch, [])
+    llm = FakeLLM(**script(review=[reply(json.dumps({"summary": "s", "findings": [advisory(source)]}))]))
+    rv = run(buggy_repo, tmp_path, make_patch(buggy_repo, GOOD, PIN), llm)
+
+    assert rv["verdict"] == "proven", rv
+    assert [f["source"] for f in rv["dropped_findings"]] == [source]
+
+
+def test_model_search_in_reproduce_is_logged(buggy_repo, tmp_path, monkeypatch):
+    opt_in_web_search(buggy_repo, monkeypatch, [])
+    llm = FakeLLM(**script(reproduce=[reply(calls=[("search_docs", {"query": "python ZeroDivisionError docs"})]), reply(REPRO)]))
+    rv = run(buggy_repo, tmp_path, make_patch(buggy_repo, GOOD), llm)
+
+    assert rv["verdict"] == "proven", rv
+    assert rv["web_searches"] == [{"phase": "REPRODUCE", "query": "python ZeroDivisionError docs", "urls": [ADVISORY_URL], "status": "ok"}]
+    tool_reply = [m for p, msgs in llm.seen if p == "reproduce" for m in msgs if m["role"] == "tool"]
+    assert "CVE-2018-18074" in tool_reply[0]["content"]
+
+
+@pytest.mark.parametrize("setting,source,verdict", [
+    ("blocker", ADVISORY_URL, "needs_review"),
+    ("blockr", ADVISORY_URL, "needs_review"),  # an unknown value fails closed
+    ("warning", ADVISORY_URL, "proven"),
+    ("blocker", None, "proven"),  # never raised without a source
+])
+def test_sourced_advisory_is_a_blocker(setting, source, verdict):
+    finding = {**advisory(source), "severity": "warning"}
+    assert review.decide("proven", set(), [finding], [], {**DEFAULTS, "advisory": setting})[0] == verdict
+
+
+def test_advisory_warning_from_the_model_still_blocks_end_to_end(buggy_repo, tmp_path, monkeypatch):
+    opt_in_web_search(buggy_repo, monkeypatch, [])
+    found = {**advisory(ADVISORY_URL), "severity": "warning"}
+    llm = FakeLLM(**script(review=[reply(json.dumps({"summary": "s", "findings": [found]}))]))
+    rv = run(buggy_repo, tmp_path, make_patch(buggy_repo, GOOD, PIN), llm)
+    assert rv["verdict"] == "needs_review" and review.ADVISORY_RULE in rv["verdict_reason"], rv

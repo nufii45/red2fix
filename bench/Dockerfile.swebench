@@ -5,7 +5,7 @@ FROM ${BASE}
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 ENV UV_PYTHON_INSTALL_DIR=/opt/r2f-python
-RUN uv venv -p 3.11 /opt/r2f && uv pip install -p /opt/r2f/bin/python openai==3.35.1
+RUN uv venv -p 3.11 /opt/r2f && uv pip install -p /opt/r2f/bin/python openai==3.35.1 langsmith==0.14.14
 
 ENV RED2FIX_TEST_PYTHON=/opt/miniconda3/envs/testbed/bin/python \
     PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1

@@ -28,10 +28,12 @@ class FakeLLM:
     def __init__(self, **script):
         self.script = {k: list(v) for k, v in script.items()}
         self.seen = []
+        self.tools = []  # (phase, offered tool names) per call
         self.spent = 0.0
 
     def chat(self, phase, messages, model_key=None, **kw):
         self.seen.append((phase, messages))
+        self.tools.append((phase, [t["function"]["name"] for t in kw.get("tools") or []]))
         queue = self.script[phase]
         return queue.pop(0) if len(queue) > 1 else queue[0]
 

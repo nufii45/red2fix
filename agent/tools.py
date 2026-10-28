@@ -167,6 +167,13 @@ SPECS = {
         {"selector": "string"},
         [],
     ),
+    # Offered only when web search is on; Run.tool_loop answers it, not call().
+    "search_docs": _spec(
+        "search_docs",
+        "Search the web for official documentation of a library's behaviour. At most 3 results with title and URL.",
+        {"query": "string"},
+        ["query"],
+    ),
 }
 
 

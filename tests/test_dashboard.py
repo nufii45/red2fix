@@ -191,3 +191,19 @@ def test_app_renders(root, monkeypatch, group, red_green, shown):
     page = "".join(m.value for m in at.markdown)
     assert f'<div class="v">{red_green}</div>' in page
     assert shown in page
+
+
+def test_app_shows_searches_and_finding_sources(root, monkeypatch):
+    path = root / "out" / "review-good" / "review.json"
+    url = "https://nvd.nist.gov/vuln/detail/CVE-2018-18074"
+    finding = {"rule": "No dependencies with known advisories", "severity": "blocker", "file": "requirements.txt",
+               "line": 1, "note": "requests 2.19.1 leaks auth", "source": url}
+    searches = [{"phase": "REVIEW", "query": "requests 2.19.1 security advisory", "urls": [url], "status": "ok"},
+                {"phase": "REPRODUCE", "query": "<script>", "urls": [], "status": "search budget used"}]
+    path.write_text(json.dumps({**REVIEW, "findings": [finding], "web_searches": searches}))
+    at = app(root, monkeypatch, "review-good")
+    assert not at.exception, at.exception
+    page = "".join(m.value for m in at.markdown)
+    assert "search · review" in page and "requests 2.19.1 security advisory" in page
+    assert page.count(f'href="{url}"') == 2  # the search row and the finding's source link
+    assert "&lt;script&gt;" in page and "search budget used" in page

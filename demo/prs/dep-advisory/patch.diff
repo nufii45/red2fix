@@ -1,0 +1,33 @@
+diff --git a/minikit/duration.py b/minikit/duration.py
+index 2295f52..990d06c 100644
+--- a/minikit/duration.py
++++ b/minikit/duration.py
+@@ -7,4 +7,4 @@ def parse_duration(text):
+     if not text.strip() or not match:
+         raise ValueError(f"invalid duration: {text!r}")
+     hours, minutes, seconds = (int(g) if g else 0 for g in match.groups())
+-    return hours * 3600 + minutes + seconds
++    return hours * 3600 + minutes * 60 + seconds
+diff --git a/requirements.txt b/requirements.txt
+new file mode 100644
+index 0000000..46c4b13
+--- /dev/null
++++ b/requirements.txt
+@@ -0,0 +1 @@
++requests==2.19.1
+diff --git a/tests/test_minikit.py b/tests/test_minikit.py
+index c9f17b0..aa52545 100644
+--- a/tests/test_minikit.py
++++ b/tests/test_minikit.py
+@@ -10,6 +10,11 @@ def test_parse_hours_and_seconds():
+     assert parse_duration("45s") == 45
+ 
+ 
++def test_parse_minutes():
++    assert parse_duration("5m") == 300
++    assert parse_duration("1h30m") == 5400
++
++
+ def test_parse_invalid():
+     with pytest.raises(ValueError):
+         parse_duration("soon")
