@@ -1,0 +1,121 @@
+# Try it: the public site (web/) dispatches one review of an allowlisted public PR.
+#
+# The step names are read by web/lib/steps.ts (the run page's step bar); rename them there too.
+# Inputs only ever reach scripts through env, never through ${{ }} inside `run:`.
+# The reviewer is this repo at the dispatched commit (github.sha), never the target's code.
+# The target's code and tests run on this runner next to NEBIUS_API_KEY_TRYIT (a separate low-limit key),
+# TAVILY_API_KEY and LANGSMITH_API_KEY, so only allowlisted repos run. No write token exists in this job.
+name: try-it
+run-name: try-it ${{ inputs.request_id }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_url:
+        description: https://github.com/owner/name/pull/N (must be on the allowlist)
+        required: true
+        type: string
+      request_id:
+        description: set by the site; 6 hex + 8 base32 characters
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: try-it
+  cancel-in-progress: false  # queue: one running, one waiting (the site refuses a third)
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PR_URL: ${{ inputs.pr_url }}
+      REQUEST_ID: ${{ inputs.request_id }}
+    steps:
+      - name: Check out the reviewer
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: red2fix
+          persist-credentials: false
+
+      - name: Fetch the PR
+        id: fetch
+        working-directory: red2fix
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TRYIT_REPOS: ${{ vars.TRYIT_REPOS }}
+          TRYIT_DAILY_CAP: ${{ vars.TRYIT_DAILY_CAP }}
+        run: python3 -m scripts.tryit_fetch
+
+      - name: Check out the repo at base
+        if: steps.fetch.outputs.refused == 'false'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ steps.fetch.outputs.repo }}
+          ref: ${{ steps.fetch.outputs.base_sha }}
+          path: target
+          persist-credentials: false
+
+      - name: Set up Python
+        if: steps.fetch.outputs.refused == 'false'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # The repo's own setup runs here, with no secrets. The reviewer's pins go last so they win.
+      - name: Install the repo
+        id: install
+        if: steps.fetch.outputs.refused == 'false'
+        timeout-minutes: 10
+        continue-on-error: true
+        working-directory: target
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          if [ -f pyproject.toml ] || [ -f setup.py ]; then pip install -e .; fi
+          for f in requirements*.txt; do
+            if [ -f "$f" ]; then pip install -r "$f"; fi
+          done
+          pip install openai==3.35.1 pytest==9.1.1 langsmith==0.14.14
+
+      # In place (--work = --repo): an editable install points at target/, so a copy would test the wrong code.
+      # The verdict never fails this step; a missing review.json is turned into an error below.
+      - name: Review
+        if: steps.fetch.outputs.refused == 'false' && steps.install.outcome == 'success'
+        working-directory: red2fix
+        env:
+          NEBIUS_API_KEY: ${{ secrets.NEBIUS_API_KEY_TRYIT }}
+          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}  # used only when the target's .red2fix.toml has web_search = true
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}  # optional; empty turns tracing off
+          LANGSMITH_TRACE_URL_BASE: ${{ vars.LANGSMITH_TRACE_URL_BASE }}
+          PYTHONDONTWRITEBYTECODE: "1"
+          NUMBER: ${{ steps.fetch.outputs.number }}
+          HEAD_SHA: ${{ steps.fetch.outputs.head_sha }}
+          SPEC_SOURCE: ${{ steps.fetch.outputs.spec_source }}
+        run: |
+          python -m agent.review --repo ../target --work ../target --spec ../spec.md --patch ../pr.patch \
+            --out ../out --number "$NUMBER" --head-sha "$HEAD_SHA" --spec-source "$SPEC_SOURCE" || true
+
+      - name: Couldn't install
+        if: steps.fetch.outputs.refused == 'false' && steps.install.outcome != 'success'
+        working-directory: red2fix
+        run: python3 -m scripts.tryit_fetch --error "couldn't install the repo"
+
+      - name: No review written
+        if: always() && hashFiles('out/review.json') == ''
+        working-directory: red2fix
+        run: python3 -m scripts.tryit_fetch --error "Red2Fix could not complete the review"
+
+      - name: Upload the evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: try-it-${{ inputs.request_id }}
+          path: out/
+          retention-days: 30
+          if-no-files-found: warn

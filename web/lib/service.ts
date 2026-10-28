@@ -1,22 +1,20 @@
-import { createHmac, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { parseFiles, unzip } from "./artifact";
 import { env } from "./config";
 import { github, type WfRun } from "./github";
+import { ID, ipTag, limitsFrom as limitsFor, refusal as refusalFor, requestIdOf, WAITING } from "./limits";
 import type { RecentRow, Result, RunState } from "./types";
 
+export { ID, requestIdOf };
+
 const B32 = "abcdefghijklmnopqrstuvwxyz234567";
-export const ID = /^[0-9a-f]{6}[a-z2-7]{8}$/;
-const WAITING = new Set(["queued", "pending", "waiting", "requested"]);
+const rules = () => ({ cap: env.dailyCap, ipHourly: env.ipHourly, salt: env.salt });
 
-/** 6 hex of a salted HMAC of the IP: the per-IP limit counts this prefix in run-names, so no store is needed. */
-export const ipTag = (ip: string) => createHmac("sha256", env.salt).update(ip).digest("hex").slice(0, 6);
-
+/** 6 hex of a salted HMAC of the IP, then 8 random: the per-IP limit counts the prefix in run-names. */
 export function newRequestId(ip: string) {
   const rand = Array.from(randomBytes(8), (b) => B32[b % 32]).join("");
-  return ipTag(ip) + rand;
+  return ipTag(ip, env.salt) + rand;
 }
-
-export const requestIdOf = (run: WfRun) => run.display_title.match(/^try-it ([0-9a-f]{6}[a-z2-7]{8})$/)?.[1] ?? null;
 
 export const todayUtc = (now = new Date()) => now.toISOString().slice(0, 10);
 
@@ -24,35 +22,8 @@ export async function todaysRuns() {
   return (await github.runs(todayUtc())).filter(requestIdOf);
 }
 
-export type Limits = { used: number; cap: number; remaining: number };
-
-export function limitsFrom(runs: WfRun[]): Limits {
-  const used = runs.length;
-  return { used, cap: env.dailyCap, remaining: Math.max(0, env.dailyCap - used) };
-}
-
-export type Refusal = { status: number; reason: string; message: string; waiting?: string; retry_minutes?: number };
-
-/** Daily cap, one waiting run at a time, and the per-IP hourly limit. Null when a new run may start. */
-export function refusal(runs: WfRun[], ip: string, now = Date.now()): Refusal | null {
-  const { remaining } = limitsFrom(runs);
-  if (remaining <= 0) {
-    return { status: 429, reason: "daily_cap", message: `Today's ${env.dailyCap} free reviews are used up. They reset at 00:00 UTC.` };
-  }
-  // GitHub keeps one running and one pending run per concurrency group; a third dispatch cancels the pending one.
-  const waiting = runs.find((r) => WAITING.has(r.status));
-  if (waiting) {
-    return { status: 409, reason: "one_waiting", message: "A review is already waiting for its turn. Try again in a minute, or watch it.", waiting: requestIdOf(waiting) ?? undefined };
-  }
-  const tag = ipTag(ip);
-  const mine = runs.filter((r) => requestIdOf(r)?.startsWith(tag) && now - Date.parse(r.created_at) < 3600_000);
-  if (mine.length >= env.ipHourly) {
-    const oldest = Math.min(...mine.map((r) => Date.parse(r.created_at)));
-    const retry = Math.max(1, Math.ceil((oldest + 3600_000 - now) / 60_000));
-    return { status: 429, reason: "ip_hourly", message: `You've started ${env.ipHourly} reviews this hour. Try again in ${retry} minute${retry === 1 ? "" : "s"}.`, retry_minutes: retry };
-  }
-  return null;
-}
+export const limitsFrom = (runs: WfRun[]) => limitsFor(runs, env.dailyCap);
+export const refusal = (runs: WfRun[], ip: string) => refusalFor(runs, ip, rules());
 
 // Finished artifacts never change: keep them for the life of the server instance.
 const results = new Map<number, Result | null>();

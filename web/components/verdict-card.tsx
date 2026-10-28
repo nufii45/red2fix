@@ -119,7 +119,9 @@ export function VerdictCard({ result, runUrl }: { result: Result; runUrl?: strin
 
       <div className="actions">
         {result.trace_url ? (
-          <a className="btn primary" href={result.trace_url} target="_blank" rel="noreferrer">View trace in LangSmith <span className="arrow">↗</span></a>
+          <a className="btn primary" href={result.trace_url} target="_blank" rel="noreferrer" title="Live traces are private to the LangSmith project">
+            View trace in LangSmith, maintainers only <span className="arrow">↗</span>
+          </a>
         ) : (
           <button className="btn" disabled title="Tracing isn't on for this run">No LangSmith trace for this run</button>
         )}

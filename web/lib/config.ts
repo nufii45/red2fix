@@ -1,3 +1,5 @@
+import { isAllowed, parseRepos } from "./limits";
+
 const int = (v: string | undefined, d: number) => (v && /^\d+$/.test(v) ? Number(v) : d);
 
 export const env = {
@@ -6,10 +8,8 @@ export const env = {
   agentRepo: process.env.TRYIT_AGENT_REPO ?? "nufii45/red2fix",
   workflow: process.env.TRYIT_WORKFLOW ?? "try-it.yml",
   ref: process.env.TRYIT_REF ?? "main",
-  repos: (process.env.TRYIT_REPOS ?? "nufii45/red2fix-minikit")
-    .split(",")
-    .map((r) => r.trim().toLowerCase())
-    .filter(Boolean),
+  // Keep in step with the workflow's TRYIT_REPOS repo variable, which checks again inside the run.
+  repos: parseRepos(process.env.TRYIT_REPOS),
   dailyCap: int(process.env.TRYIT_DAILY_CAP, 25),
   ipHourly: int(process.env.TRYIT_IP_HOURLY, 3),
   salt: process.env.TRYIT_SALT ?? "local-dev-salt",
@@ -18,4 +18,4 @@ export const env = {
 /** Without a token, GitHub is simulated from the recorded runs in fixtures/. */
 export const fake = process.env.TRYIT_FAKE_GITHUB === "1" || !env.token;
 
-export const allowed = (repo: string) => env.repos.includes(repo.toLowerCase());
+export const allowed = (repo: string) => isAllowed(repo, env.repos);
