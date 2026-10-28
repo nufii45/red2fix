@@ -28,7 +28,7 @@ REVIEW = {
     "findings": [{"rule": "No changes unrelated to the spec", "severity": "warning", "file": "minikit/duration.py",
                   "line": 10, "note": "a <b>note</b>"}],
     "cost_usd": 0.03, "seconds": 23, "calls": {"ultra": 13, "super": 0, "nano": 2},
-    "pr_url": "https://github.com/nufii45/red2fix-demo/pull/4",
+    "pr_url": "https://github.com/nufii45/red2fix-minikit/pull/4",
 }
 REPORT = {
     "reviews": 2, "unproven": 1, "errors": 0, "median_usd": 0.3, "median_s": 150, "total_usd": 0.6, "calls": {},
@@ -159,7 +159,7 @@ def test_app_renders_a_review_verdict_card(root, monkeypatch):
     page = "".join(m.value for m in at.markdown)
     assert '<div class="r2f-verdict">✅ Proven</div>' in page
     assert "5m means five minutes" in page and "passed: 1 passed" in page
-    assert 'href="https://github.com/nufii45/red2fix-demo/pull/4"' in page
+    assert 'href="https://github.com/nufii45/red2fix-minikit/pull/4"' in page
     assert "<b>note</b>" not in page and "a &lt;b&gt;note&lt;/b&gt;" in page  # model-written notes are escaped
     assert any("parse_duration('5m')" in c.value for c in at.code)
 
