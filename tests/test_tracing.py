@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -7,9 +8,10 @@ from pathlib import Path
 from agent import tools, tracing
 
 ROOT = Path(__file__).resolve().parent.parent
+BASE = "https://smith.langchain.com/o/org-1/projects/p/proj-1"
 
 # Runs one FakeLLM review; argv: repo, tmp dir, and "off" (no key: no langsmith, no network),
-# "url" or "fail" (key set: what RunTree.get_url does).
+# "url" or "no_base" (key set, LANGSMITH_TRACE_URL_BASE set or not).
 REVIEW = """
 import json, socket, sys
 from pathlib import Path
@@ -20,9 +22,9 @@ if sys.argv[3] == "off":
     socket.socket.connect = no_network
 else:
     from langsmith.run_trees import RunTree
-    def fail(self):
-        raise RuntimeError("langsmith down")
-    RunTree.get_url = (lambda self: "https://smith.example/r/1") if sys.argv[3] == "url" else fail
+    def lookup(self):
+        raise AssertionError("trace_url must not be looked up: the key is write-only")
+    RunTree.get_url = lookup
 from test_main import FakeLLM
 from test_review import GOOD, make_patch, run, script
 repo, tmp = Path(sys.argv[1]), Path(sys.argv[2])
@@ -37,6 +39,8 @@ def review(repo, tmp_path, mode):
     if mode != "off":
         # Every upload goes to a closed local port, so all of them fail.
         env.update(LANGSMITH_API_KEY="lsv2-test-key", LANGSMITH_ENDPOINT="http://127.0.0.1:9")
+    if mode == "url":
+        env["LANGSMITH_TRACE_URL_BASE"] = BASE + "?timeModel=%7B%7D"  # as copied from the UI
     p = subprocess.run([sys.executable, "-c", REVIEW, str(repo), str(tmp_path), mode],
                        cwd=ROOT, env=env, capture_output=True, text=True, timeout=120)
     assert p.returncode == 0, p.stderr
@@ -53,11 +57,13 @@ def test_no_key_means_no_langsmith_and_no_network(buggy_repo, tmp_path):
 def test_trace_url_is_recorded_even_when_uploads_fail(buggy_repo, tmp_path):
     out = review(buggy_repo, tmp_path, "url")
     assert out["rv"]["verdict"] == "proven"
-    assert out["rv"]["trace_url"] == out["result"]["trace_url"] == "https://smith.example/r/1"
+    url = out["rv"]["trace_url"]
+    assert url == out["result"]["trace_url"]
+    assert re.fullmatch(re.escape(BASE) + r"/r/[0-9a-f-]{36}\?poll=true", url), url
 
 
-def test_a_failing_trace_never_fails_the_review(buggy_repo, tmp_path):
-    out = review(buggy_repo, tmp_path, "fail")
+def test_no_url_base_means_no_trace_url(buggy_repo, tmp_path):
+    out = review(buggy_repo, tmp_path, "no_base")
     assert out["rv"]["verdict"] == "proven"
     assert "trace_url" not in out["rv"] and "trace_url" not in out["result"]
 

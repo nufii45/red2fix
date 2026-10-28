@@ -81,6 +81,7 @@ jobs:
         env:
           NEBIUS_API_KEY: ${{ secrets.NEBIUS_API_KEY }}
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}  # optional; empty turns tracing off
+          LANGSMITH_TRACE_URL_BASE: ${{ vars.LANGSMITH_TRACE_URL_BASE }}  # project URL from the LangSmith UI, for trace_url
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
           python -m agent.review --repo ../pr --spec ../spec.md --patch ../pr.patch --out ../out \

@@ -44,6 +44,9 @@ Everything LangSmith goes through it; nothing else imports `langsmith`.
 - `phase(name)`: closes the previous phase span and opens a new one (module-level `ExitStack`).
 - `finish(**meta) -> url | None`: closes the open phase, adds metadata + tags (mode, verdict) to the current root
   run tree, returns `run_tree.get_url()`. Whole body in `try/except Exception: return None`.
+  **Changed after review:** the key is write-only, so `get_url()` can't work; the URL is
+  `$LANGSMITH_TRACE_URL_BASE` (project URL from the UI, query string dropped) + `/r/<root run id>?poll=true`,
+  and no `trace_url` when it's unset.
 - `redact(obj)`: walks dicts/lists/strings and replaces the value of every env var whose name contains
   KEY/TOKEN/SECRET/PASSWORD (values ≥ 8 chars) with `[redacted]`. Pure, testable without langsmith.
 

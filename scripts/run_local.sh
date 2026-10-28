@@ -6,6 +6,6 @@ n="${1:?usage: scripts/run_local.sh <issue number, e.g. 1>}"
 cd "$(dirname "$0")/.."
 docker build -q -t red2fix-agent . >/dev/null
 mkdir -p "out/$n"
-docker run --rm --env-file .env ${LANGSMITH_API_KEY:+-e LANGSMITH_API_KEY} \
+docker run --rm --env-file .env ${LANGSMITH_API_KEY:+-e LANGSMITH_API_KEY} ${LANGSMITH_TRACE_URL_BASE:+-e LANGSMITH_TRACE_URL_BASE} \
   -v "$PWD/demo/repo:/src:ro" -v "$PWD/demo/issues:/issues:ro" -v "$PWD/out/$n:/out" \
   red2fix-agent agent.main --repo /src --issue "/issues/$n.md" --out /out --number "$n"

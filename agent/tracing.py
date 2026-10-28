@@ -57,7 +57,11 @@ def phase(name):
 
 
 def finish(**meta):
-    """Close the open phase, tag the root run with meta, and return its URL (None when off or on any error)."""
+    """Close the open phase, tag the root run with meta, and return its URL (None when off, unset or on any error).
+
+    The URL is built from LANGSMITH_TRACE_URL_BASE (the project's URL from the LangSmith UI), not read from
+    the API: a write-only tracing key can't look it up.
+    """
     _phase.close()
     if not ENABLED:
         return None
@@ -65,7 +69,8 @@ def finish(**meta):
         rt = langsmith.get_current_run_tree()
         rt.metadata.update(meta)
         rt.tags = [*(rt.tags or []), str(meta.get("mode")), str(meta.get("verdict"))]
-        return rt.get_url()
+        base = os.environ.get("LANGSMITH_TRACE_URL_BASE", "").split("?")[0].rstrip("/")
+        return f"{base}/r/{rt.id}?poll=true" if base else None
     except Exception:
         return None
 
