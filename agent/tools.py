@@ -88,7 +88,8 @@ def apply_patch(root, diff):
 
 
 def run_tests(root, selector=""):
-    args = [TEST_PYTHON, "-m", "pytest", "-q", "-p", "no:cacheprovider"]
+    # The output is parsed and shown to the model; FORCE_COLOR in the env would fill it with ANSI codes.
+    args = [TEST_PYTHON, "-m", "pytest", "-q", "-p", "no:cacheprovider", "--color=no"]
     if selector:
         args.append(selector)
     try:
