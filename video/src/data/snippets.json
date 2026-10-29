@@ -1,0 +1,72 @@
+{
+  "file": "agent/review.py",
+  "startLine": 84,
+  "lines": [
+    "def decide(proof, new_failures, findings, restricted_touched, policy, spec_source=\"spec_file\"):",
+    "    \"\"\"(verdict, reason). Proof and regression come from pytest; findings can only lower the verdict.",
+    "",
+    "    proof: \"proven\" (red on base, green on head), \"doesnt_fix\", \"unreached\" (head failed exactly as base",
+    "    did), \"unproven\" or \"error\".",
+    "    \"\"\"",
+    "    timeouts = sorted(f for f in new_failures if f.startswith(\"<\"))",
+    "    if proof == \"error\" or timeouts:",
+    "        return \"error\", \", \".join(timeouts) or \"proof could not be computed\"",
+    "    if new_failures:",
+    "        return \"breaks_tests\", \"new failing tests: \" + \", \".join(sorted(new_failures))",
+    "    if proof == \"doesnt_fix\":",
+    "        return \"doesnt_fix\", \"the repro test still fails with the PR applied\"",
+    "    blockers = [f for f in findings if severity(f, policy) == \"blocker\"]",
+    "    why = [f\"blocker: {f.get('rule')}\" for f in blockers]",
+    "    unproven = {\"unreached\": \"the repro test fails the same way on base and head: the test never reached the changed code\",",
+    "                \"unproven\": \"no test showed the claimed behaviour failing on base\" if policy[\"require_proof\"] else None}.get(proof)",
+    "    if unproven:",
+    "        # A blocker is a known problem, which says more than \"no proof\": show it, with the missing proof.",
+    "        return (\"needs_review\", \"; \".join([unproven, *why])) if blockers else (\"unproven\", unproven)",
+    "    if blockers or restricted_touched:",
+    "        why += [f\"restricted path: {p}\" for p in restricted_touched]",
+    "        return \"needs_review\", \"; \".join(why)",
+    "    if proof == \"unproven\":",
+    "        return \"unproven\", \"no failing test; require_proof is off\"",
+    "    if spec_source == \"pr_description\":",
+    "        # The author wrote both the claim and the fix, so the proof only shows the PR does what it says.",
+    "        return \"needs_review\", \"proven against the PR's own description; link an issue for a full ✅\"",
+    "    return \"proven\", \"red on base, green on head, no new failures, no blockers\""
+  ],
+  "steps": [
+    {
+      "label": "error",
+      "from": 7,
+      "to": 8
+    },
+    {
+      "label": "breaks_tests",
+      "from": 9,
+      "to": 10
+    },
+    {
+      "label": "doesnt_fix",
+      "from": 11,
+      "to": 12
+    },
+    {
+      "label": "unproven (needs_review if a blocker)",
+      "from": 13,
+      "to": 19
+    },
+    {
+      "label": "needs_review",
+      "from": 20,
+      "to": 22
+    },
+    {
+      "label": "needs_review",
+      "from": 25,
+      "to": 27
+    },
+    {
+      "label": "proven",
+      "from": 28,
+      "to": 28
+    }
+  ]
+}

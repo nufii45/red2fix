@@ -1,0 +1,10 @@
+node_modules
+dist
+.DS_Store
+.env
+out
+public/rec/
+# Remotion template extras, not part of the video
+.agents/
+.claude/
+skills-lock.json
