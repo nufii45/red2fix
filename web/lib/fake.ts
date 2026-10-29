@@ -5,6 +5,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { strToU8, zipSync } from "fflate";
+import { offline } from "./config";
 import { DEMO_REPO, EXAMPLES } from "./examples";
 import type { GitHub, Pr, WfRun } from "./github";
 import type { Step } from "./types";
@@ -42,8 +43,9 @@ function state() {
   if (!store.__tryit) {
     const now = Date.now();
     const dayStart = new Date(new Date(now).toISOString().slice(0, 10)).getTime();
-    // A few finished runs from earlier today, so "recent" and the daily count look like a real day.
-    const seeds = ["breaks", "good", "inject2", "wrong"].map((name, i) => ({
+    // A few finished runs from earlier today, so "recent" and the daily count look like a real day. Never when
+    // offline in production: there they'd pass for real activity.
+    const seeds = (offline ? [] : ["breaks", "good", "inject2", "wrong"]).map((name, i) => ({
       id: 9000 + i,
       requestId: `${["5e1a07", "a2c4f9", "0b7d3e", "c81f22"][i]}${["k2m4p6q7", "t3v5x7z2", "b4d6f2h3", "j5l7n3r4"][i]}`,
       prUrl: `https://github.com/${DEMO_REPO}/pull/${EXAMPLES.find((e) => e.name === name)!.number}`,
@@ -81,7 +83,7 @@ function toRun({ r, start, end }: ReturnType<typeof schedule>[number], now: numb
     created_at: iso(r.created),
     run_started_at: now >= start ? iso(start) : null,
     updated_at: iso(Math.min(now, end)),
-    html_url: "https://github.com/nufii45/red2fix/actions",
+    html_url: "", // a replay has no workflow run to link to
   };
 }
 

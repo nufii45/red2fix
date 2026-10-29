@@ -268,7 +268,8 @@ This builds the agent image, applies `demo/prs/good/patch.diff` to `demo/repo` i
 writes `review.json`, `review.md`, the repro test and the logs to `out/review-good/`.
 
 **The site.** Without a `GITHUB_DISPATCH_TOKEN` it replays the recorded demo reviews in `web/fixtures/`, so it
-needs no keys.
+needs no keys; every replayed run view says so. On Vercel production without the token it says live reviews are
+offline and offers only the examples.
 
 ```sh
 cd web && pnpm install && pnpm dev     # then open http://localhost:3300

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { allowed } from "@/lib/config";
+import { allowed, offline } from "@/lib/config";
+import { exampleFor } from "@/lib/examples";
 import { github } from "@/lib/github";
 import { parseTarget, prUrl } from "@/lib/parse-url";
 import { clientIp, newRequestId, refusal, todaysRuns } from "@/lib/service";
@@ -11,6 +12,9 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   const target = parseTarget(String(body?.url ?? ""));
   if (!target) return fail(400, "bad_url", "That isn't a GitHub repo or pull request URL.");
+  if (offline && !(target.kind === "pr" && exampleFor(target.repo, target.number))) {
+    return fail(503, "offline", "Live reviews are offline. Only the examples, as recorded reviews, are available.");
+  }
   if (!allowed(target.repo)) {
     return fail(403, "not_allowlisted", `Try it only runs on the demo repo for now. ${target.repo} can run Red2Fix in its own GitHub Actions.`);
   }

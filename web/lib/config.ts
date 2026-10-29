@@ -15,7 +15,17 @@ export const env = {
   salt: process.env.TRYIT_SALT ?? "local-dev-salt",
 };
 
-/** Without a token, GitHub is simulated from the recorded runs in fixtures/. */
-export const fake = process.env.TRYIT_FAKE_GITHUB === "1" || !env.token;
+/**
+ * replay: GitHub is simulated from the recorded runs in fixtures/ (no token, or TRYIT_FAKE_GITHUB=1 outside production).
+ * offline: Vercel production without a token never replays quietly; it says live reviews are offline and replays
+ * only the examples.
+ */
+export function modeOf(e: Record<string, string | undefined>) {
+  const token = !!e.GITHUB_DISPATCH_TOKEN;
+  const production = e.VERCEL_ENV === "production";
+  return { replay: !token || (!production && e.TRYIT_FAKE_GITHUB === "1"), offline: production && !token };
+}
+
+export const { replay: fake, offline } = modeOf(process.env);
 
 export const allowed = (repo: string) => isAllowed(repo, env.repos);

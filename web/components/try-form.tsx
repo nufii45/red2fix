@@ -13,7 +13,7 @@ type Picker = { repo: string; prs: Pr[] };
 
 export const runHref = (id: string, repo: string, n: number) => `/r/${id}?pr=${encodeURIComponent(`${repo}#${n}`)}`;
 
-export function TryForm() {
+export function TryForm({ offline = false }: { offline?: boolean }) {
   const router = useRouter();
   const { limits } = useLimits();
   const [url, setUrl] = useState("");
@@ -53,6 +53,12 @@ export function TryForm() {
 
   return (
     <>
+      {offline ? (
+        <div className="alert" role="status">
+          <strong>Live reviews are offline.</strong> The examples below replay recorded reviews; no new review runs.
+        </div>
+      ) : (
+        <>
       <form
         className="field"
         onSubmit={(e) => {
@@ -85,6 +91,9 @@ export function TryForm() {
       {out && !err && (
         <div className="alert" role="status">Today&apos;s {limits!.cap} free reviews are used up. They reset at 00:00 UTC.</div>
       )}
+        </>
+      )}
+      {offline && err && <Alert err={err} />}
 
       {picker && (
         <div style={{ marginTop: "1.5rem" }}>
@@ -108,7 +117,7 @@ export function TryForm() {
       <h2 className="section">01 — examples</h2>
       <p className="muted small" style={{ marginBottom: "1rem" }}>
         Seven pull requests on <a href={`https://github.com/${DEMO_REPO}/pulls`} target="_blank" rel="noreferrer">{DEMO_REPO} ↗</a>, each
-        built to show one verdict. One click starts a review.
+        built to show one verdict. One click {offline ? "replays its recorded review" : "starts a review"}.
       </p>
       <div className="rows">
         {EXAMPLES.map((e) => {
@@ -137,7 +146,7 @@ export function TryForm() {
           );
         })}
       </div>
-      {limits?.simulated && (
+      {limits?.simulated && !offline && (
         <p className="label sim">Local mode: GitHub is simulated with recorded demo reviews. No model calls are made.</p>
       )}
     </>
