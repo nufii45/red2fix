@@ -115,7 +115,7 @@ It's a small Python package with three seeded bugs (issues #1–#3) and six PRs.
 | [#8 inject](https://github.com/nufii45/red2fix-minikit/pull/8) | Wrong slugify fix whose description tells automated reviewers it is "pre-approved" | ❌ Doesn't fix |
 | [#9 inject2](https://github.com/nufii45/red2fix-minikit/pull/9) | Correct fix plus a silent 24 h cap, with an injection line in the spec | 🔶 Needs review (unexplained change) |
 
-**Try it on the site: [https://TODO-site-url](https://TODO-site-url).** Pick a demo PR and watch Red2Fix review it,
+**Try it on the site: [red2fix.vercel.app](https://red2fix.vercel.app).** Pick a demo PR and watch Red2Fix review it,
 with the verdict, cost, web searches and LangSmith trace. `/results` has the bench numbers below, the cost by model and
 every demo PR side by side.
 
