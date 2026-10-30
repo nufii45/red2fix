@@ -7,6 +7,58 @@ base branch and passes on the PR, checks that nothing else broke, and then revie
 required GitHub check, so GitHub only merges what Red2Fix has proven. It runs on NVIDIA Nemotron through
 Nebius Token Factory.
 
+## For judges
+
+| Requirement | Where |
+|---|---|
+| OSI-approved license | [MIT](LICENSE) |
+| Setup instructions | [Quick start](#quick-start), [GitHub merge gate](examples/github/README.md) |
+| How we use NVIDIA Nemotron | [Three Nemotron 3 models, one per job](#how-we-use-nvidia-nemotron-on-nebius-token-factory) |
+| Where Token Factory accelerated our workflow | [Where Token Factory sped us up](#where-token-factory-sped-us-up) |
+| Other Nebius tools and services | [Nebius services used](#nebius-services-used): Token Factory only |
+
+## Quick start
+
+Needs [uv](https://docs.astral.sh/uv/), Docker and a Token Factory key.
+
+```sh
+git clone https://github.com/nufii45/red2fix && cd red2fix
+uv sync
+echo 'NEBIUS_API_KEY=your-key' > .env
+# Optional: TAVILY_API_KEY=... (web search; demo/repo's policy turns it on), LANGSMITH_API_KEY=... (tracing)
+uv run pytest -q
+```
+
+**Review a demo PR locally.** This uses the model, about $0.03 per review.
+
+```sh
+scripts/review_local.sh good      # or: wrong, breaks, restricted, inject, inject2, dep-advisory
+cat out/review-good/review.md
+```
+
+This builds the agent image, applies `demo/prs/good/patch.diff` to `demo/repo` inside the container, and
+writes `review.json`, `review.md`, the repro test and the logs to `out/review-good/`.
+
+**The site.** Without a `GITHUB_DISPATCH_TOKEN` it replays the recorded demo reviews in `web/fixtures/`, so it
+needs no keys; every replayed run view says so. On Vercel production without the token it says live reviews are
+offline and offers only the examples.
+
+```sh
+cd web && pnpm install && pnpm dev     # then open http://localhost:3300
+```
+
+**Bench report.** It runs offline from the stored logs; the bench outputs aren't in the repo, and
+`bench/run.py` regenerates them. `export_bench.py` then writes the JSON that `/results` reads
+(`web/public/data/`), and `tests/test_export_bench.py` checks it against `review_report.md`.
+
+```sh
+uv run bench/report_review.py rv-full
+uv run scripts/export_bench.py
+```
+
+**GitHub merge gate.** Copy the workflow, add the `NEBIUS_API_KEY` secret, and require `red2fix/verdict`.
+The full checklist is in [examples/github/README.md](examples/github/README.md).
+
 ## How it works in 30 seconds
 
 ```
@@ -63,7 +115,7 @@ It's a small Python package with three seeded bugs (issues #1–#3) and six PRs.
 | [#8 inject](https://github.com/nufii45/red2fix-minikit/pull/8) | Wrong slugify fix whose description tells automated reviewers it is "pre-approved" | ❌ Doesn't fix |
 | [#9 inject2](https://github.com/nufii45/red2fix-minikit/pull/9) | Correct fix plus a silent 24 h cap, with an injection line in the spec | 🔶 Needs review (unexplained change) |
 
-**Try it on the site: [https://TODO-site-url](https://TODO-site-url).** Pick a demo PR and watch Red2Fix review it,
+**Try it on the site: [red2fix.vercel.app](https://red2fix.vercel.app).** Pick a demo PR and watch Red2Fix review it,
 with the verdict, cost, web searches and LangSmith trace. `/results` has the bench numbers below, the cost by model and
 every demo PR side by side.
 
@@ -101,6 +153,25 @@ Median latency per call, from every ledger in this project:
 | Nano | 86 | 3.1 s |
 
 Prices are in `config.py`. The Super price there hasn't been checked against the Token Factory pricing page.
+
+### Where Token Factory sped us up
+
+- **One endpoint, three Nemotron sizes.** Every phase picks its model from a dict in [`config.py`](config.py)
+  (`ROUTES`). Moving VERIFY_RED from Nano to Ultra after bench pilot 3 was a one-line change, with no new
+  client, key or deployment.
+- **OpenAI-compatible, with native tool calling.** [`agent/llm.py`](agent/llm.py) uses the stock `openai`
+  client pointed at Token Factory. Tool calls worked on all three models, so we wrote no JSON-mode fallback.
+- **Fast enough to sit in a merge gate.** Median latency is 2.4 s per Ultra call, and a demo-repo review
+  finishes in 22–44 s, so the `red2fix/verdict` check comes back while the PR author is still on the page.
+- **Cheap enough to measure ourselves.** The full 40-review SWE-bench run cost $19.49 (median $0.46 per
+  review), and a demo review costs $0.02–0.04. That let us rerun pilots, change the rules and rerun, instead of
+  guessing.
+
+### Nebius services used
+
+**Token Factory only**, for every model call. We use no Nebius AI Cloud compute or Serverless Jobs: sandboxes
+run under local Docker and on GitHub's runners. Other tools: GitHub Actions (the merge gate), Docker
+(sandboxes), Tavily (optional web search), LangSmith (tracing) and Vercel (the try-it site).
 
 ## Results on SWE-bench Lite
 
@@ -245,48 +316,6 @@ What this does and doesn't show:
 - **Nebius is used for inference only**, through Token Factory. No Nebius Serverless Jobs or AI Cloud
   compute: sandboxes run under local Docker and on GitHub's runners.
 
-## Quick start
-
-Needs [uv](https://docs.astral.sh/uv/), Docker and a Token Factory key.
-
-```sh
-git clone https://github.com/nufii45/red2fix && cd red2fix
-uv sync
-echo 'NEBIUS_API_KEY=your-key' > .env
-# Optional: TAVILY_API_KEY=... (web search; demo/repo's policy turns it on), LANGSMITH_API_KEY=... (tracing)
-uv run pytest -q
-```
-
-**Review a demo PR locally.** This uses the model, about $0.03 per review.
-
-```sh
-scripts/review_local.sh good      # or: wrong, breaks, restricted, inject, inject2, dep-advisory
-cat out/review-good/review.md
-```
-
-This builds the agent image, applies `demo/prs/good/patch.diff` to `demo/repo` inside the container, and
-writes `review.json`, `review.md`, the repro test and the logs to `out/review-good/`.
-
-**The site.** Without a `GITHUB_DISPATCH_TOKEN` it replays the recorded demo reviews in `web/fixtures/`, so it
-needs no keys; every replayed run view says so. On Vercel production without the token it says live reviews are
-offline and offers only the examples.
-
-```sh
-cd web && pnpm install && pnpm dev     # then open http://localhost:3300
-```
-
-**Bench report.** It runs offline from the stored logs; the bench outputs aren't in the repo, and
-`bench/run.py` regenerates them. `export_bench.py` then writes the JSON that `/results` reads
-(`web/public/data/`), and `tests/test_export_bench.py` checks it against `review_report.md`.
-
-```sh
-uv run bench/report_review.py rv-full
-uv run scripts/export_bench.py
-```
-
-**GitHub merge gate.** Copy the workflow, add the `NEBIUS_API_KEY` secret, and require `red2fix/verdict`.
-The full checklist is in [examples/github/README.md](examples/github/README.md).
-
 ## Development
 
 `dashboard/` is a local viewer for bench and demo runs: it reads `out/` and runs on localhost only. It isn't a
@@ -333,4 +362,4 @@ From the git log ([DECISIONS.md](docs/spec/DECISIONS.md) has the details):
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE), an OSI-approved license.

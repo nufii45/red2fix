@@ -21,7 +21,7 @@ from dashboard import data, launch
 BUDGET_USD = 50.0
 ROOT = data.ROOT
 OUT = ROOT / "out"
-SITE_URL = "https://TODO-site-url"  # TODO: the deployed site (web/), also in README.md
+SITE_URL = "https://red2fix.vercel.app"  # the deployed site (web/), also in README.md
 
 st.set_page_config(page_title="Red2Fix local run viewer", layout="wide")
 st.markdown(f"<style>{(Path(__file__).parent / 'style.css').read_text()}</style>", unsafe_allow_html=True)
